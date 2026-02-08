@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bgArt" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="goldGrad8" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4d03f"/>
+      <stop offset="50%" style="stop-color:#d4ac0d"/>
+      <stop offset="100%" style="stop-color:#b7950b"/>
+    </linearGradient>
+    <filter id="glow8">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="100" cy="100" r="95" fill="url(#bgArt)" stroke="url(#goldGrad8)" stroke-width="3"/>
+
+  <!-- Artist palette -->
+  <path d="M60 100 Q60 60 100 60 Q140 60 140 100 Q140 140 100 140 Q85 140 80 125 Q75 115 85 110 Q95 105 90 95 Q85 85 70 90 Q60 95 60 100 Z" 
+        fill="none" stroke="url(#goldGrad8)" stroke-width="2.5" filter="url(#glow8)"/>
+
+  <!-- Paint blobs -->
+  <circle cx="80" cy="85" r="8" fill="url(#goldGrad8)" opacity="0.9"/>
+  <circle cx="110" cy="75" r="7" fill="url(#goldGrad8)" opacity="0.8"/>
+  <circle cx="125" cy="95" r="6" fill="url(#goldGrad8)" opacity="0.7"/>
+  <circle cx="115" cy="120" r="7" fill="url(#goldGrad8)" opacity="0.8"/>
+
+  <!-- Paintbrush -->
+  <line x1="145" y1="55" x2="160" y2="40" stroke="url(#goldGrad8)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M145 55 Q140 65 135 75" fill="none" stroke="url(#goldGrad8)" stroke-width="3"/>
+
+  <!-- Thumb hole -->
+  <circle cx="100" cy="115" r="8" fill="none" stroke="url(#goldGrad8)" stroke-width="2"/>
+</svg>

@@ -1,0 +1,199 @@
+/**
+ * Éditeur de profil pour le parent (superviseur).
+ */
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
+import { User, Loader2, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+
+export function ParentProfileEditor() {
+  const { user, initialize } = useAuthStore();
+  const [fullName, setFullName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  const [pendingPassword, setPendingPassword] = useState({ new: '', confirm: '' });
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name || '');
+    }
+  }, [user]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+    setIsSaving(true);
+    setSaved(false);
+    try {
+      await supabase
+        .from('profiles')
+        .update({ full_name: fullName.trim() || null })
+        .eq('id', user.id);
+      await initialize();
+      setSaved(true);
+    } catch (_) {}
+    setIsSaving(false);
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    if (newPassword.length < 8) {
+      setPasswordError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    setPendingPassword({ new: newPassword, confirm: confirmPassword });
+    setShowPasswordConfirm(true);
+  };
+
+  const handleConfirmPasswordChange = async () => {
+    setPasswordError(null);
+    setPasswordSuccess(false);
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pendingPassword.new });
+      if (error) throw error;
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSuccess(true);
+    } catch (err) {
+      setPasswordError((err as Error).message);
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="p-6 stone-card rounded-2xl max-w-md">
+      <h2 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
+        <User className="w-5 h-5 text-amber-400" />
+        Mon profil
+      </h2>
+      <p className="text-amber-100/60 text-sm mb-6">
+        Gère les informations de ton compte superviseur.
+      </p>
+
+      <form onSubmit={handleSave} className="space-y-4">
+        <div>
+          <label className="block text-amber-100/80 text-sm mb-2">Nom complet</label>
+          <input
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Ton nom"
+            className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
+          />
+        </div>
+
+        <div>
+          <label className="block text-amber-100/80 text-sm mb-2">Email</label>
+          <p className="px-4 py-3 bg-slate-900/30 border border-amber-500/10 rounded-xl text-amber-100/70 text-sm">
+            {user.email}
+          </p>
+          <p className="text-xs text-amber-100/50 mt-1">L'email ne peut pas être modifié ici.</p>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {isSaving ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : saved ? (
+            <>
+              <CheckCircle className="w-5 h-5" />
+              Enregistré
+            </>
+          ) : (
+            'Enregistrer'
+          )}
+        </button>
+      </form>
+
+      {/* Changer le mot de passe */}
+      <div className="mt-8 pt-8 border-t border-amber-500/20">
+        <h3 className="font-['Cinzel_Decorative'] text-lg font-bold text-amber-100 mb-4 flex items-center gap-2">
+          <Lock className="w-5 h-5 text-amber-400" />
+          Changer le mot de passe
+        </h3>
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
+          <div>
+            <label className="block text-amber-100/80 text-sm mb-2">Nouveau mot de passe</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={8}
+                className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100 pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-100/50 hover:text-amber-400"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-amber-100/80 text-sm mb-2">Confirmer le mot de passe</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={8}
+              className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
+            />
+          </div>
+          {passwordError && (
+            <div className="stone-alert-error">
+              <p className="text-sm">{passwordError}</p>
+            </div>
+          )}
+          {passwordSuccess && (
+            <div className="stone-alert-success">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <p className="text-sm">Mot de passe mis à jour.</p>
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={isChangingPassword || !newPassword || !confirmPassword}
+            className="w-full py-3 border border-amber-500/30 text-amber-400 rounded-xl font-medium hover:bg-amber-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-4 h-4" />}
+            Changer le mot de passe
+          </button>
+        </form>
+        <ConfirmDialog
+          open={showPasswordConfirm}
+          onOpenChange={setShowPasswordConfirm}
+          title="Changer le mot de passe ?"
+          description="Tu vas modifier ton mot de passe. Tu devras utiliser le nouveau mot de passe pour te connecter la prochaine fois."
+          confirmLabel="Confirmer"
+          cancelLabel="Annuler"
+          variant="default"
+          onConfirm={handleConfirmPasswordChange}
+        />
+      </div>
+    </div>
+  );
+}

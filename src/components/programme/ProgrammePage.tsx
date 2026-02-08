@@ -1,0 +1,361 @@
+/**
+ * Page Programme scolaire — programme actuel et compétences par classe.
+ * Bouton pour télécharger le programme en format imprimable.
+ * Si parent ou enfant télécharge, l'autre le voit.
+ */
+import { useEffect, useState } from 'react';
+import { useCurriculumStore } from '../../stores/curriculumStore';
+import { useAuthStore } from '../../stores/authStore';
+import { getProgrammePourClasse, SOCLE_COMMUN, generateProgrammeHtml, SUBJECT_ORDER, getProgrammeOfficielPdfUrl, PROGRAMMES_OFFICIELS_PDF } from '../../lib/programmeScolaire';
+import { recordProgrammeDownload, getLastProgrammeDownload, getProgrammeCollegeGlobalForClasse, addManualCurriculumEntry } from '../../lib/supabase';
+import { Download, FileText, Target, BookOpen, Eye, ExternalLink, Plus, Loader2 } from 'lucide-react';
+import type { Classe, Subject } from '../../types';
+
+export function ProgrammePage() {
+  const { user } = useAuthStore();
+  const { curriculum, progress, loadCurriculum } = useCurriculumStore();
+  const classe = (user?.classe as Classe) || null;
+  const programme = getProgrammePourClasse(classe);
+  const [lastDownload, setLastDownload] = useState<{ downloaded_by_role: string; downloaded_at: string } | null>(null);
+  const [programmeGlobal, setProgrammeGlobal] = useState<{ subject: string; chapter_name: string; description: string | null }[]>([]);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [newSource, setNewSource] = useState({ subject: '' as Subject | '', chapterName: '' });
+  const [isAddingSource, setIsAddingSource] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) loadCurriculum(user.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      getLastProgrammeDownload(user.id).then(({ data }) => setLastDownload(data ?? null));
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (classe) {
+      getProgrammeCollegeGlobalForClasse(classe).then(({ data }) => setProgrammeGlobal(data ?? []));
+    } else {
+      setProgrammeGlobal([]);
+    }
+  }, [classe]);
+
+  const handleAddSource = async () => {
+    if (!user?.id || !newSource.subject || !newSource.chapterName.trim()) return;
+    setIsAddingSource(true);
+    const { error } = await addManualCurriculumEntry(user.id, newSource.subject, newSource.chapterName.trim());
+    setIsAddingSource(false);
+    if (!error) {
+      setNewSource({ subject: '', chapterName: '' });
+      setShowAddSource(false);
+      loadCurriculum(user.id);
+    }
+  };
+
+  const programmeFromGlobal = programmeGlobal.length > 0
+    ? programmeGlobal.reduce((acc, p) => {
+        const subj = p.subject as Subject;
+        if (!acc[subj]) acc[subj] = [];
+        acc[subj].push({ sujet: p.chapter_name, description: p.description || undefined });
+        return acc;
+      }, {} as Record<Subject, { sujet: string; description?: string }[]>)
+    : null;
+  const programmeToShow = programmeFromGlobal ?? programme;
+
+  const handleDownload = async () => {
+    if (!user?.id) return;
+    const html = generateProgrammeHtml({
+      studentName: user.full_name || 'Élève',
+      classe,
+      programme: programmeToShow,
+      curriculum,
+      progress,
+    });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `programme-scolaire-${user.full_name?.replace(/\s+/g, '-') || 'eleve'}-${classe || 'classe'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    await recordProgrammeDownload(user.id, 'enfant', user.id);
+    const { data } = await getLastProgrammeDownload(user.id);
+    setLastDownload(data ?? null);
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 px-1 sm:px-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="font-['Cinzel_Decorative'] text-xl sm:text-2xl font-bold text-amber-100 flex items-center gap-2">
+            <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400 shrink-0" />
+            Mon programme scolaire
+          </h2>
+          <p className="text-amber-100/60 text-sm mt-1">
+            Programme officiel et compétences pour la {classe || 'classe'} — {progress.total} chapitres dans ton parcours
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {lastDownload && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-100/80 text-sm">
+              <Eye className="w-4 h-4 shrink-0" />
+              <span>
+                Dernier téléchargement : par {lastDownload.downloaded_by_role === 'parent' ? 'le parent' : 'moi'} le{' '}
+                {new Date(lastDownload.downloaded_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={handleDownload}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 transition-all shrink-0"
+          >
+            <Download className="w-5 h-5" />
+            Télécharger le programme
+          </button>
+        </div>
+      </div>
+
+      {/* Programme officiel */}
+      <section className="stone-card rounded-xl sm:rounded-2xl p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <h3 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-amber-400" />
+            Programme officiel {classe ? `(${classe})` : ''}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {getProgrammeOfficielPdfUrl(classe) ? (
+              <a
+                href={getProgrammeOfficielPdfUrl(classe)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all text-sm font-medium"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Voir le PDF officiel
+              </a>
+            ) : (
+              <>
+                <a
+                  href={PROGRAMMES_OFFICIELS_PDF.cycle3}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-sm font-medium"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Cycle 3 (6ème)
+                </a>
+                <a
+                  href={PROGRAMMES_OFFICIELS_PDF.cycle4}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-sm font-medium"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Cycle 4 (5ème-3ème)
+                </a>
+              </>
+            )}
+            <a
+              href={PROGRAMMES_OFFICIELS_PDF.datasetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-amber-100/60 hover:text-amber-400 text-sm"
+            >
+              Source : Éducation nationale (data.gouv.fr)
+            </a>
+          </div>
+        </div>
+        <p className="text-amber-100/50 text-sm mb-4">
+          Le programme officiel est mis à disposition par le Super Admin. Tu peux ajouter des sources supplémentaires ci-dessous.
+        </p>
+        {programmeFromGlobal ? (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm mb-4 inline-flex">
+              Programme scrapé par l'admin (matières et chapitres officiels)
+            </div>
+            {(() => {
+              const subjects = [...new Set(programmeGlobal.map((p) => p.subject))];
+              const ordered = [...SUBJECT_ORDER.filter((s) => subjects.includes(s)), ...subjects.filter((s: string) => !SUBJECT_ORDER.includes(s as Subject))];
+              return ordered.map((subject) => {
+                const items = programmeGlobal.filter((p) => p.subject === subject);
+                if (!items.length) return null;
+                return (
+                  <div key={subject}>
+                    <h4 className="font-semibold text-amber-200 mb-2">{subject}</h4>
+                    <ul className="space-y-2">
+                      {items.map((p, i) => (
+                        <li key={i} className="flex flex-col text-amber-100/90 text-sm pl-4 border-l-2 border-amber-500/30">
+                          <span>{p.chapter_name}</span>
+                          {p.description && <span className="text-amber-100/50 text-xs mt-0.5">{p.description}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        ) : programme ? (
+          <div className="space-y-6">
+            {SUBJECT_ORDER.map((subject) => {
+              const themes = programme[subject];
+              if (!themes?.length) return null;
+              return (
+                <div key={subject}>
+                  <h4 className="font-semibold text-amber-200 mb-2">{subject}</h4>
+                  <ul className="space-y-2">
+                    {themes.map((t, i) => (
+                      <li key={i} className="flex flex-col text-amber-100/90 text-sm pl-4 border-l-2 border-amber-500/30">
+                        <span>{t.sujet}</span>
+                        {t.description && <span className="text-amber-100/50 text-xs mt-0.5">{t.description}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-amber-100/60">
+              Le programme sera mis à disposition par l'administrateur. Indique ta classe dans Mon profil pour afficher le résumé par défaut.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Ajouter une source supplémentaire */}
+      <section className="stone-card rounded-2xl p-6">
+        <h3 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
+          <Plus className="w-5 h-5 text-amber-400" />
+          Ajouter une source
+        </h3>
+        <p className="text-amber-100/60 text-sm mb-4">
+          Tu peux ajouter des chapitres ou ressources supplémentaires à ton parcours.
+        </p>
+        {showAddSource ? (
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <select
+              value={newSource.subject}
+              onChange={(e) => setNewSource((s) => ({ ...s, subject: e.target.value as Subject }))}
+              className="px-4 py-2 bg-slate-800 border border-amber-500/20 rounded-xl text-amber-100"
+            >
+              <option value="">Matière</option>
+              {SUBJECT_ORDER.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="Nom du chapitre ou ressource"
+              value={newSource.chapterName}
+              onChange={(e) => setNewSource((s) => ({ ...s, chapterName: e.target.value }))}
+              className="flex-1 px-4 py-2 bg-slate-800 border border-amber-500/20 rounded-xl text-amber-100"
+            />
+            <button
+              onClick={handleAddSource}
+              disabled={isAddingSource || !newSource.subject || !newSource.chapterName.trim()}
+              className="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-xl disabled:opacity-50"
+            >
+              {isAddingSource ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Ajouter'}
+            </button>
+            <button onClick={() => setShowAddSource(false)} className="px-4 py-2 text-amber-100/60 hover:text-amber-400">
+              Annuler
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAddSource(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30"
+          >
+            <Plus className="w-4 h-4" />
+            Ajouter un chapitre ou une ressource
+          </button>
+        )}
+      </section>
+
+      {/* Compétences du socle commun */}
+      <section className="stone-card rounded-2xl p-6">
+        <h3 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
+          <Target className="w-5 h-5 text-amber-400" />
+          Compétences du socle commun
+        </h3>
+        <p className="text-amber-100/60 text-sm mb-6">
+          Les compétences que tu dois acquérir au collège (cycle 3 et 4).
+        </p>
+        <div className="space-y-6">
+          {SOCLE_COMMUN.map((dom, i) => (
+            <div key={i}>
+              <h4 className="font-semibold text-amber-200 mb-2">{dom.domaine}</h4>
+              <ul className="space-y-1.5">
+                {dom.competences.map((c, j) => (
+                  <li key={j} className="text-amber-100/80 text-sm pl-4 border-l-2 border-amber-500/20">
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Mon programme actuel (curriculum) */}
+      <section className="stone-card rounded-2xl p-6">
+        <h3 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
+          Mon parcours actuel
+        </h3>
+        <p className="text-amber-100/60 text-sm mb-4">
+          {progress.total} chapitres — {progress.completed} maîtrisés ({progress.percentage}%)
+        </p>
+        {curriculum.length > 0 ? (
+          <div className="space-y-4">
+            {SUBJECT_ORDER.map((subject) => {
+              const chapters = curriculum
+                .filter((c) => c.subject === subject)
+                .sort((a, b) => a.order_index - b.order_index);
+              if (!chapters.length) return null;
+              const subjProgress = progress.bySubject[subject];
+              return (
+                <div key={subject}>
+                  <h4 className="font-semibold text-amber-200 mb-2 flex items-center gap-2">
+                    {subject}
+                    {subjProgress && (
+                      <span className="text-xs font-normal text-amber-100/50">
+                        ({subjProgress.completed}/{subjProgress.total} maîtrisés)
+                      </span>
+                    )}
+                  </h4>
+                  <ul className="space-y-1.5">
+                    {chapters.map((ch) => (
+                      <li
+                        key={ch.id}
+                        className={`text-sm pl-4 border-l-2 ${
+                          ch.status === 'maitrise'
+                            ? 'border-emerald-500/50 text-emerald-300/90'
+                            : ch.status === 'vu_en_classe'
+                            ? 'border-amber-500/50 text-amber-200/90'
+                            : 'border-slate-600 text-amber-100/60'
+                        }`}
+                      >
+                        {ch.chapter_name}
+                        <span className="text-xs ml-2 opacity-70">
+                          {ch.status === 'maitrise' ? '✓' : ch.status === 'vu_en_classe' ? '…' : '○'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-amber-100/60">
+            Ton programme personnel sera rempli à partir de tes bulletins analysés. Va dans <strong>Bulletin</strong> pour en déposer un.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}

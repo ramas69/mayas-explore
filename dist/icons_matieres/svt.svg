@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bgSVT" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="goldGrad6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4d03f"/>
+      <stop offset="50%" style="stop-color:#d4ac0d"/>
+      <stop offset="100%" style="stop-color:#b7950b"/>
+    </linearGradient>
+    <filter id="glow6">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="100" cy="100" r="95" fill="url(#bgSVT)" stroke="url(#goldGrad6)" stroke-width="3"/>
+
+  <!-- DNA helix -->
+  <path d="M70 60 Q90 80 70 100 Q50 120 70 140" 
+        fill="none" stroke="url(#goldGrad6)" stroke-width="3" filter="url(#glow6)"/>
+  <path d="M130 60 Q110 80 130 100 Q150 120 130 140" 
+        fill="none" stroke="url(#goldGrad6)" stroke-width="3" filter="url(#glow6)"/>
+
+  <!-- DNA rungs -->
+  <line x1="75" y1="75" x2="125" y2="75" stroke="url(#goldGrad6)" stroke-width="2" opacity="0.7"/>
+  <line x1="65" y1="100" x2="135" y2="100" stroke="url(#goldGrad6)" stroke-width="2" opacity="0.7"/>
+  <line x1="75" y1="125" x2="125" y2="125" stroke="url(#goldGrad6)" stroke-width="2" opacity="0.7"/>
+
+  <!-- Earth outline -->
+  <circle cx="100" cy="100" r="70" fill="none" stroke="url(#goldGrad6)" stroke-width="1" opacity="0.3"/>
+
+  <!-- Leaf decoration -->
+  <path d="M150 150 Q160 140 165 150 Q160 160 150 150" 
+        fill="url(#goldGrad6)" opacity="0.8"/>
+</svg>

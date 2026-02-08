@@ -1,0 +1,21 @@
+---
+description: Vision et objectif du produit Maya Explorer
+alwaysApply: true
+---
+
+# Maya Explorer — Vision produit
+
+## Objectif
+Transformer le programme scolaire et les difficultés (bulletins) en une aventure de terrain où **l'élève est une exploratrice** et **l'IA est son mentor**.
+
+## Produit
+SaaS d'accompagnement scolaire pour élèves adolescentes au collège.
+
+## Métaphores clés
+- **Élève** = exploratrice qui vit une aventure
+- **IA** = mentor qui la guide
+- **Bulletins / difficultés** = matière à transformer en parcours ludique
+- **Programme scolaire** = terrain à explorer
+
+## Implémentation
+Garder ce cadre en tête lors du développement : l'UX, les textes et les parcours doivent rester alignés avec cette aventure exploratrice (carte, temple, révisions comme quêtes, etc.).

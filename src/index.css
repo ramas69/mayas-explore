@@ -1,0 +1,441 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 50% 5%;
+    --foreground: 45 80% 90%;
+    --card: 210 40% 8%;
+    --card-foreground: 45 80% 90%;
+    --popover: 210 40% 8%;
+    --popover-foreground: 45 80% 90%;
+    --primary: 45 100% 50%;
+    --primary-foreground: 210 50% 5%;
+    --secondary: 160 60% 15%;
+    --secondary-foreground: 45 80% 90%;
+    --muted: 210 30% 15%;
+    --muted-foreground: 45 40% 60%;
+    --accent: 25 50% 50%;
+    --accent-foreground: 210 50% 5%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 45 50% 30%;
+    --input: 210 30% 15%;
+    --ring: 45 100% 50%;
+    --radius: 0.625rem;
+    
+    /* Custom Maya Colors */
+    --maya-gold: 45 100% 50%;
+    --maya-jungle: 160 60% 15%;
+    --maya-night: 210 50% 8%;
+    --maya-terracotta: 25 50% 50%;
+    --maya-cyan: 190 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(180deg, #0a1628 0%, #0d3b2e 50%, #0a1628 100%);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Cinzel Decorative', serif;
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Jauge style Maya - plus ça remplit, plus ça vire vert-bleu */
+  .gauge-maya {
+    @apply h-2 sm:h-2.5 rounded-full overflow-hidden bg-slate-800/90 border border-amber-500/20;
+  }
+  .gauge-maya-fill {
+    @apply h-full rounded-full transition-all duration-500;
+    background: linear-gradient(to right, #d97706 0%, #fbbf24 35%, #34d399 70%, #22d3ee 100%);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.2);
+  }
+}
+
+@layer components {
+  /* Temple Reveal Animation */
+  .temple-reveal {
+    animation: templeReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  
+  @keyframes templeReveal {
+    from {
+      opacity: 0;
+      transform: translateY(60px) scale(0.95);
+      filter: blur(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+  
+  /* Jungle Sway Animation */
+  .jungle-sway {
+    animation: jungleSway 3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  
+  @keyframes jungleSway {
+    0%, 100% { transform: rotate(-1deg); }
+    50% { transform: rotate(1deg); }
+  }
+  
+  /* Badge Float Animation */
+  .badge-float {
+    animation: badgeFloat 3s ease-in-out infinite;
+  }
+  
+  @keyframes badgeFloat {
+    0%, 100% { transform: translate(-50%, -100%) translateY(0) scale(1); }
+    50% { transform: translate(-50%, -100%) translateY(-4px) scale(1.05); }
+  }
+  
+  /* Badge Glow Animation - douce et variable */
+  .badge-glow {
+    animation: badgeGlow var(--badge-glow-duration, 2.8s) ease-in-out infinite;
+  }
+  
+  @keyframes badgeGlow {
+    0%, 100% { 
+      filter: brightness(1) drop-shadow(0 0 6px rgba(255, 215, 0, 0.15));
+    }
+    25% { 
+      filter: brightness(1.04) drop-shadow(0 0 10px rgba(255, 215, 0, 0.25));
+    }
+    50% { 
+      filter: brightness(1.08) drop-shadow(0 0 14px rgba(255, 215, 0, 0.2));
+    }
+    75% { 
+      filter: brightness(1.03) drop-shadow(0 0 8px rgba(255, 215, 0, 0.18));
+    }
+  }
+  
+  /* Badge Shimmer - lumière douce et aléatoire */
+  .badge-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .badge-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: -30%;
+    background: linear-gradient(
+      110deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.04) 42%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 58%,
+      transparent 65%
+    );
+    animation: badgeShimmer var(--badge-shimmer-duration, 4s) ease-in-out infinite;
+    animation-delay: calc(var(--badge-shimmer-duration, 4s) * -0.3);
+    pointer-events: none;
+  }
+  
+  @keyframes badgeShimmer {
+    0% { transform: translateX(-120%) translateY(-10%) skewX(-12deg); opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { transform: translateX(120%) translateY(10%) skewX(-12deg); opacity: 0.6; }
+  }
+  
+  /* Point lumineux qui suit la ligne de la bordure */
+  .card-border-light {
+    position: relative;
+    isolation: isolate;
+  }
+  
+  .card-border-light-dot {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    top: 0;
+    left: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 230, 150, 0.95) 0%, rgba(255, 215, 0, 0.6) 40%, transparent 70%);
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.8);
+    pointer-events: none;
+    z-index: 10;
+    /* Chemin qui suit le contour du rectangle arrondi (96x80, radius 8) */
+    offset-path: path("M 8,0 L 88,0 Q 96,0 96,8 L 96,72 Q 96,80 88,80 L 8,80 Q 0,80 0,72 L 0,8 Q 0,0 8,0");
+    -webkit-offset-path: path("M 8,0 L 88,0 Q 96,0 96,8 L 96,72 Q 96,80 88,80 L 8,80 Q 0,80 0,72 L 0,8 Q 0,0 8,0");
+    offset-rotate: 0deg;
+    animation: borderLightMove var(--border-light-duration, 6s) linear infinite;
+    -webkit-animation: borderLightMove var(--border-light-duration, 6s) linear infinite;
+  }
+  
+  @keyframes borderLightMove {
+    to { offset-distance: 100%; }
+  }
+  
+  /* Treasure Glow Animation */
+  .treasure-glow {
+    animation: treasureGlow 2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  }
+  
+  @keyframes treasureGlow {
+    0%, 100% { 
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.4), 0 0 40px rgba(255, 215, 0, 0.2);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 40px rgba(255, 215, 0, 0.8), 0 0 80px rgba(255, 215, 0, 0.4);
+      transform: scale(1.02);
+    }
+  }
+  
+  /* Golden Text Gradient */
+  .text-golden {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FFD700 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Stone Card Effect */
+  .stone-card {
+    background: linear-gradient(145deg, rgba(20, 30, 40, 0.9) 0%, rgba(10, 20, 30, 0.95) 100%);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    box-shadow: 
+      0 4px 30px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .stone-card:hover {
+    border-color: rgba(255, 215, 0, 0.5);
+    box-shadow: 
+      0 8px 40px rgba(255, 215, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateY(-4px);
+  }
+  
+  /* Glyph Reveal on Hover */
+  .glyph-reveal {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .glyph-reveal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+      rgba(255, 215, 0, 0.15) 0%, 
+      transparent 50%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  
+  .glyph-reveal:hover::before {
+    opacity: 1;
+  }
+  
+  /* Particle Canvas */
+  .particle-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  /* Button Styles */
+  .btn-maya {
+    @apply relative px-8 py-4 font-semibold text-sm tracking-wider uppercase;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0.1) 100%);
+    border: 2px solid rgba(255, 215, 0, 0.5);
+    color: #FFD700;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+  }
+  
+  .btn-maya::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.4) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  
+  .btn-maya:hover {
+    border-color: #FFD700;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+    transform: translateY(-2px);
+  }
+  
+  .btn-maya:hover::before {
+    opacity: 1;
+  }
+  
+  /* 3D Card Tilt */
+  .card-3d {
+    transform-style: preserve-3d;
+    perspective: 1000px;
+  }
+  
+  .card-3d-inner {
+    transition: transform 0.3s ease;
+    transform-style: preserve-3d;
+  }
+  
+  /* Scroll Reveal */
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .scroll-reveal.revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  /* Count Up Animation */
+  .count-up {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* Navigation Glass */
+  .nav-glass {
+    background: rgba(10, 22, 40, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+  }
+  
+  /* Section Divider */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, 
+      transparent 0%, 
+      rgba(255, 215, 0, 0.3) 20%, 
+      rgba(255, 215, 0, 0.5) 50%, 
+      rgba(255, 215, 0, 0.3) 80%, 
+      transparent 100%);
+  }
+}
+
+@layer utilities {
+  /* Custom Easing */
+  .ease-temple {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .ease-jungle {
+    transition-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+  
+  .ease-treasure {
+    transition-timing-function: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+  
+  /* Text Shadow */
+  .text-shadow-gold {
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.3);
+  }
+  
+  /* Glow Effects */
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  }
+  
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
+  }
+  
+  /* Gradient Borders */
+  .border-gradient-gold {
+    border-image: linear-gradient(135deg, #FFD700, #FFA500, #FFD700) 1;
+  }
+
+  /* Alerts stylés Maya */
+  .stone-alert-error {
+    @apply px-4 py-3 rounded-xl flex items-center gap-3;
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    color: rgb(251, 113, 133);
+  }
+
+  .stone-alert-success {
+    @apply px-4 py-3 rounded-xl flex items-center gap-3;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: rgb(52, 211, 153);
+  }
+
+  /* Champs déroulants stylés Maya */
+  .stone-select {
+    @apply w-full px-4 py-3 rounded-xl text-amber-100 transition-colors;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+  }
+
+  .stone-select:hover {
+    border-color: rgba(255, 215, 0, 0.4);
+  }
+
+  .stone-select:focus {
+    @apply outline-none ring-2 ring-amber-400/30;
+    border-color: rgba(255, 215, 0, 0.5);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a1628;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #FFD700, #FFA500);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #FFA500, #FFD700);
+}
+
+/* Selection */
+::selection {
+  background: rgba(255, 215, 0, 0.3);
+  color: #FFD700;
+}
