@@ -4,8 +4,9 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useAuthStore } from './stores/authStore';
 import { useCurriculumStore } from './stores/curriculumStore';
-import { startSession, getProfile, calculateDailyUsage, getSessionById, saveCanvasSnapshot } from './lib/supabase';
-import type { Subject, Curriculum, Session } from './types';
+import { useSandboxStore } from './stores/sandboxStore';
+import { supabase, startSession, getProfile, calculateDailyUsage, getSessionById, saveCanvasSnapshot } from './lib/supabase';
+import type { Subject, Curriculum, Session, SchoolZone } from './types';
 import { ParticleEffects } from './components/ParticleEffects';
 import { Navigation } from './sections/Navigation';
 import { Hero } from './sections/Hero';
@@ -29,6 +30,7 @@ import { JungleMap } from './components/map/JungleMap';
 import { GrimoireModal } from './components/map/GrimoireModal';
 import { ParentDashboard } from './components/dashboard/ParentDashboard';
 import { BulletinViewer } from './components/bulletin/BulletinViewer';
+import { BulletinUploader } from './components/bulletin/BulletinUploader';
 import { PlanningViewer } from './components/planning/PlanningViewer';
 import { RewardModal } from './components/rewards/RewardModal';
 import { TempleViewer } from './components/temple/TempleViewer';
@@ -43,8 +45,8 @@ const StudentTabsWithIcons = [
   { id: 'programme' as const, label: 'Programme', icon: BookOpen },
   { id: 'profil' as const, label: 'Mon profil', icon: User },
 ];
-import { ParentProfileEditor } from './components/profile/ParentProfileEditor';
 import { ProfileEditor } from './components/profile/ProfileEditor';
+import { ParentProfileEditor } from './components/profile/ParentProfileEditor';
 import { ProgrammePage } from './components/programme/ProgrammePage';
 import { ParentProgramme } from './components/programme/ParentProgramme';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
@@ -149,21 +151,53 @@ function StudentApp() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [grimoireSubject, setGrimoireSubject] = useState<Subject | null>(null);
   const [canvasInitialData, setCanvasInitialData] = useState<{ elements: unknown[]; appState?: Record<string, unknown> } | null>(null);
+  const [canvasForSessionId, setCanvasForSessionId] = useState<string | null>(null);
+  const [bulletinRefresh, setBulletinRefresh] = useState(0);
+  const [planningRefresh] = useState(0);
+  const [, setStudentZone] = useState<SchoolZone>('C');
+  const [planningData, setPlanningData] = useState<{ city_zone?: SchoolZone; weekly_slots?: { file_url?: string } } | null>(null);
 
   useEffect(() => {
     if (user?.id) loadCurriculum(user.id);
   }, [user?.id, loadCurriculum]);
 
   useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('planning')
+      .select('city_zone, weekly_slots')
+      .eq('student_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setPlanningData(data as typeof planningData);
+          setStudentZone((data.city_zone as SchoolZone) || 'C');
+        } else {
+          setPlanningData(null);
+        }
+      });
+  }, [user?.id, planningRefresh]);
+
+  const resetSandbox = useSandboxStore((s) => s.resetSandbox);
+
+  useEffect(() => {
+    resetSandbox();
     if (currentSessionId && currentSessionId !== 'demo-session') {
+      setCanvasForSessionId(null);
       getSessionById(currentSessionId).then(({ data }) => {
         const snap = (data as { canvas_snapshot?: { elements?: unknown[]; appState?: Record<string, unknown> } } | null)?.canvas_snapshot;
-        setCanvasInitialData(snap?.elements?.length ? { elements: snap.elements, appState: snap.appState } : null);
+        const payload = snap?.elements?.length ? { elements: snap.elements, appState: snap.appState } : null;
+        setCanvasInitialData(payload);
+        setCanvasForSessionId(currentSessionId);
       });
     } else {
       setCanvasInitialData(null);
+      setCanvasForSessionId(null);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, resetSandbox]);
+
+  const initialDataForSession =
+    canvasForSessionId === currentSessionId ? canvasInitialData : null;
 
   const sessionId = currentSessionId ?? 'demo-session';
 
@@ -397,12 +431,12 @@ function StudentApp() {
                   }
                 >
                   <ExcalidrawSandbox
-                    key={sessionId}
+                    key={`${sessionId}-${initialDataForSession ? 'ready' : 'loading'}`}
                     sessionId={sessionId}
-                    initialData={canvasInitialData}
-                    onSaveSnapshot={(elements) => {
+                    initialData={initialDataForSession ?? undefined}
+                    onSaveSnapshot={(snapshot) => {
                       if (sessionId && sessionId !== 'demo-session') {
-                        saveCanvasSnapshot(sessionId, { elements });
+                        saveCanvasSnapshot(sessionId, snapshot);
                       }
                     }}
                   />
@@ -418,11 +452,18 @@ function StudentApp() {
           )}
 
           {activeTab === 'bulletin' && (
-            <div className="max-w-4xl mx-auto w-full">
+            <div className="max-w-4xl mx-auto w-full space-y-6">
               <h2 className="font-['Cinzel_Decorative'] text-xl sm:text-2xl font-bold text-amber-100 mb-4 sm:mb-6">
                 Mes bulletins
               </h2>
-              <BulletinViewer studentId={user?.id || ''} />
+              <p className="text-amber-100/60 text-sm">
+                Ajoute ton bulletin : l&apos;IA l&apos;analyse et identifie tes zones prioritaires. Tu peux aussi le faire depuis la Configuration parent.
+              </p>
+              <BulletinUploader
+                studentId={user?.id || ''}
+                onAnalysisComplete={() => setBulletinRefresh((x) => x + 1)}
+              />
+              <BulletinViewer studentId={user?.id || ''} refreshTrigger={bulletinRefresh} />
             </div>
           )}
 

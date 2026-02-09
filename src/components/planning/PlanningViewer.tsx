@@ -90,7 +90,7 @@ export function PlanningViewer({ studentId, refreshTrigger, canEdit, onDeleted, 
       <div className="p-6 text-center stone-card rounded-2xl">
         <Calendar className="w-12 h-12 text-amber-500/50 mx-auto mb-3" />
         <p className="text-amber-100 font-medium mb-1">Aucun planning configuré</p>
-        <p className="text-amber-100/60 text-sm">Ton parent peut configurer la zone scolaire et uploader l'emploi du temps dans la Configuration.</p>
+        <p className="text-amber-100/60 text-sm">Tu peux ajouter ton emploi du temps ci-dessus, ou ton parent peut le faire depuis la Configuration.</p>
       </div>
     );
   }

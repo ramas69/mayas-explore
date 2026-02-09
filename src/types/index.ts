@@ -64,11 +64,19 @@ export interface AvatarEquipment {
   map: boolean;
 }
 
+/** Structure réelle de weekly_slots en base (JSON) */
+export interface WeeklySlotsData {
+  file_url?: string | null;
+  file_type?: 'image' | 'pdf' | null;
+  slots?: WeeklySlot[];
+  vacation_slots?: WeeklySlot[];
+}
+
 export interface Planning {
   id: string;
   student_id: string;
   city_zone: SchoolZone;
-  weekly_slots: WeeklySlot[];
+  weekly_slots: WeeklySlotsData;
   missed_sessions_count: number;
   intensified_vacation_mode: boolean;
   created_at: string;
@@ -78,9 +86,10 @@ export interface Planning {
 export interface WeeklySlot {
   day: 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = dimanche
   startTime: string; // HH:mm
-  duration: number; // minutes
+  duration?: number; // minutes (optionnel selon le contexte)
+  endTime?: string; // HH:mm (optionnel)
   subject?: Subject;
-  isVacation: boolean;
+  isVacation?: boolean;
 }
 
 export interface Session {

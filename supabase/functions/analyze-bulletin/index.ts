@@ -92,10 +92,15 @@ Deno.serve(async (req) => {
     const systemPrompt = `Tu es une IA experte en analyse de bulletins scolaires français (collège/lycée).
 
 IMPORTANT : Le bulletin peut avoir PLUSIEURS PAGES. Analyse TOUTES les pages.
-Pour CHAQUE matière, détermine UNIQUEMENT le STATUS (4 niveaux) selon les indicateurs visuels (barres, couleurs) :
-  • "ok" = vert dominant, niveau correct
-  • "reviser" = orange léger, à réviser
-  • "surveiller" = beaucoup d'orange/rouge, à surveiller
+Pour CHAQUE matière, détermine le STATUS (4 niveaux) en prenant en compte TOUS les indicateurs visuels :
+  • PASTILLES (ronds/cercles colorés) : vert = ok, orange = réviser, rouge = danger
+  • JAUGE / BARRE DE NIVEAU : couleur de la barre (vert, orange, rouge)
+  • Toute autre indication couleur (texte, fond, etc.)
+
+Combine pastilles ET jauge pour déterminer le status final :
+  • "ok" = vert dominant
+  • "reviser" = orange léger
+  • "surveiller" = beaucoup d'orange/rouge
   • "danger" = beaucoup de rouge, urgence
 
 Ne calcule PAS les notes toi-même. La note sera déduite automatiquement du status.
@@ -116,7 +121,7 @@ Retourne UNIQUEMENT un JSON valide, sans markdown :
 
 Règles :
 - Matières : utilise ces noms : "Maths", "Français", "Histoire-Géo", "SVT", "Physique-Chimie", "Anglais", "Espagnol", "Théologie", "Arts", "Musique", "Technologie", "EPS".
-- "status" : ok = vert, reviser = orange léger, surveiller = orange/rouge intermédiaire, danger = rouge.
+- "status" : déduis-le des PASTILLES ET de la jauge couleur. ok = vert, reviser = orange léger, surveiller = orange/rouge intermédiaire, danger = rouge.
 - "priority" : high = danger, medium = surveiller ou reviser, low = ok.
 - N'inclus PAS "grade" ni "overall_average" dans ta réponse.`;
 
@@ -129,7 +134,7 @@ Règles :
         {
           role: 'user',
           content: [
-            { type: 'text', text: 'Analyse ce bulletin. Inclus toutes les matières, signale les notes rouges. Extrais les informations au format JSON demandé.' },
+            { type: 'text', text: 'Analyse ce bulletin. Pour chaque matière, regarde les PASTILLES (ronds colorés) ET la jauge/couleur. Inclus toutes les matières. Extrais les informations au format JSON demandé.' },
             { type: 'image_url', image_url: { url: fileUrl } },
           ],
         },
@@ -137,7 +142,7 @@ Règles :
     } else if (fileType === 'pdf_pages' && pageImageUrls?.length > 0) {
       // PDF chunké : chaque page = 1 image. Analyse TOUTES les pages.
       const contentParts: { type: string; text?: string; image_url?: { url: string } }[] = [
-        { type: 'text', text: `Voici les ${pageImageUrls.length} pages du bulletin. Analyse TOUTES les pages et liste TOUTES les matières. Signale les notes rouges (< 10). Extrais les informations au format JSON demandé.` },
+        { type: 'text', text: `Voici les ${pageImageUrls.length} pages du bulletin. Analyse TOUTES les pages. Pour chaque matière, prends en compte les PASTILLES (ronds colorés) ET la jauge. Liste TOUTES les matières. Extrais les informations au format JSON demandé.` },
         ...pageImageUrls.map((url: string) => ({ type: 'image_url', image_url: { url } })),
       ];
       messages = [
@@ -168,7 +173,7 @@ Règles :
             },
             {
               type: 'text',
-              text: 'Analyse TOUTES les pages de ce bulletin de notes scolaire. Inclus toutes les matières, y compris celles sur les pages 2, 3, etc. Signale les notes rouges (faibles). Extrais les informations au format JSON demandé.',
+              text: 'Analyse TOUTES les pages de ce bulletin. Pour chaque matière, regarde les PASTILLES (ronds colorés) ET la jauge/couleur. Inclus toutes les matières. Extrais les informations au format JSON demandé.',
             },
           ],
         },
@@ -211,7 +216,7 @@ Règles :
       return err('Réponse OpenAI invalide (JSON)');
     }
 
-    // Calculer grade, gauge_niveau et overall_average à partir des status uniquement (sans pastilles)
+    // Calculer grade, gauge_niveau et overall_average à partir des status (pastilles + jauge analysés par l'IA)
     const subjects: BulletinSubject[] = (parsed.subjects || []).map((s) => {
       const status = (s.status ?? (s.priority === 'high' ? 'danger' : s.priority === 'medium' ? 'reviser' : 'ok')) as keyof typeof STATUS_TO_GRADE;
       const grade = STATUS_TO_GRADE[status] ?? 10;

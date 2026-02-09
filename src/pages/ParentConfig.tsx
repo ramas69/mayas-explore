@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { getPendingChildApprovals } from '../lib/supabase';
+import { supabase, getPendingChildApprovals, linkPendingChildrenToParent } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { BulletinUploader } from '../components/bulletin/BulletinUploader';
 import { BulletinViewer } from '../components/bulletin/BulletinViewer';
@@ -97,6 +96,12 @@ export function ParentConfig() {
 
   const loadChildrenData = async () => {
     setIsLoading(true);
+
+    // Lier les enfants qui viennent de s'inscrire (parent_email = mon email) — même si parent déjà connecté
+    if (user?.id && user?.email) {
+      await linkPendingChildrenToParent(user.id, user.email);
+    }
+
     const { data: pending } = await getPendingChildApprovals(user?.id || '');
     setPendingApprovals(pending || []);
 
@@ -135,15 +140,17 @@ export function ParentConfig() {
         loadChildrenData();
       }
     } else {
-      // Rattacher: rechercher enfant par email et lier (implémentation à compléter)
+      // Rattacher: rechercher enfant par email et lier (nécessite RLS: parent peut lire si parent_email = son email)
+      const emailNorm = childEmail.trim().toLowerCase();
       const { data: childProfile } = await supabase
         .from('profiles')
         .select('id, parent_email')
-        .eq('email', childEmail.trim().toLowerCase())
         .eq('role', 'enfant')
+        .ilike('email', emailNorm)
         .maybeSingle();
 
-      if (childProfile && childProfile.parent_email === user?.email) {
+      const parentEmailNorm = user?.email?.trim().toLowerCase();
+      if (childProfile && parentEmailNorm && childProfile.parent_email?.trim().toLowerCase() === parentEmailNorm) {
         const { error: updateErr } = await supabase
           .from('profiles')
           .update({ parent_id: user?.id, parent_email: null })

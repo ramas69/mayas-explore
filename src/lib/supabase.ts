@@ -556,8 +556,14 @@ export const completeMission = async (
   }
 };
 
-// Bulletin analysis helpers
-export const saveBulletinAnalysis = async (studentId: string, fileUrl: string, fileType: 'pdf' | 'image', extractedData: any) => {
+// Bulletin analysis helpers (utilisé par BulletinUploader directement ; gardé pour usage programmatique)
+export const saveBulletinAnalysis = async (
+  studentId: string,
+  fileUrl: string,
+  fileType: 'pdf' | 'image',
+  extractedData: unknown,
+  semester: string
+) => {
   const { data, error } = await supabase
     .from('bulletin_analyses')
     .insert({
@@ -565,6 +571,7 @@ export const saveBulletinAnalysis = async (studentId: string, fileUrl: string, f
       file_url: fileUrl,
       file_type: fileType,
       extracted_data: extractedData,
+      semester,
     })
     .select()
     .single();

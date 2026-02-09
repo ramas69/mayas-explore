@@ -46,7 +46,7 @@ export function BulletinViewer({ studentId, refreshTrigger }: BulletinViewerProp
         <FileText className="w-16 h-16 text-amber-500/50 mx-auto mb-4" />
         <p className="text-amber-100 font-medium mb-2">Aucun bulletin pour le moment</p>
         <p className="text-amber-100/60 text-sm">
-          Ton parent peut uploader tes bulletins dans la configuration. Une fois analysés, tu les verras ici.
+          Tu peux ajouter ton bulletin ci-dessus, ou ton parent peut le faire depuis la Configuration.
         </p>
       </div>
     );

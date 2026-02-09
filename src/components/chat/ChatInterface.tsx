@@ -162,8 +162,8 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
     if (onSelectGuardian) {
       const subject = VALID_SUBJECTS.includes(redirectModalToShow.subject as Subject)
         ? (redirectModalToShow.subject as Subject)
-        : (redirectModalToShow.subject as Subject);
-      onSelectGuardian(subject);
+        : undefined;
+      if (subject) onSelectGuardian(subject);
     }
     clearRedirectModal();
   };

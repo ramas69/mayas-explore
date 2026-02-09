@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import { getPendingChildApprovals } from '../../lib/supabase';
+import { supabase, getPendingChildApprovals, linkPendingChildrenToParent } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { WeeklyProgramTable } from '../planning/WeeklyProgramTable';
 import { StoneSelect } from '../ui/StoneSelect';
@@ -65,6 +64,11 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
 
   const loadChildrenData = async () => {
     setIsLoading(true);
+
+    // Lier les enfants qui viennent de s'inscrire (parent_email = mon email) — même si parent déjà connecté
+    if (user?.id && user?.email) {
+      await linkPendingChildrenToParent(user.id, user.email);
+    }
 
     // Demandes en attente (parent_id = moi, is_approved = false)
     const { data: pending } = await getPendingChildApprovals(user?.id || '');

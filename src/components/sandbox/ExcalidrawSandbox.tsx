@@ -7,7 +7,7 @@ import { VictoryOverlay } from './VictoryOverlay';
 interface ExcalidrawSandboxProps {
   sessionId: string | null;
   initialData?: { elements: unknown[]; appState?: Record<string, unknown> } | null;
-  onSaveSnapshot?: (elements: unknown[]) => void;
+  onSaveSnapshot?: (snapshot: { elements: unknown[]; appState?: Record<string, unknown> }) => void;
   readOnly?: boolean;
 }
 
@@ -119,13 +119,16 @@ export function ExcalidrawSandbox({
   );
 
   const handleChange = useCallback(
-    (elements: readonly unknown[], _appState?: unknown, _files?: unknown) => {
+    (elements: readonly unknown[], appState?: unknown, _files?: unknown) => {
       const arr = [...elements];
       setElements(arr);
       if (onSaveSnapshot) {
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
-          onSaveSnapshot(arr);
+          onSaveSnapshot({
+            elements: arr,
+            appState: appState && typeof appState === 'object' ? (appState as Record<string, unknown>) : undefined,
+          });
           saveTimeoutRef.current = null;
         }, 500);
       }

@@ -65,6 +65,10 @@ export const useAuthStore = create<AuthState>()(
             }
             if (session?.user) {
               const { data: profile } = await getProfile(session.user.id);
+              // Parent : lier les enfants en attente (parent_email = mon email)
+              if (profile?.role === 'parent' && profile?.email) {
+                await linkPendingChildrenToParent(profile.id, profile.email);
+              }
               set({ user: profile, session, isAuthenticated: !!profile });
             }
           });
@@ -110,13 +114,18 @@ export const useAuthStore = create<AuthState>()(
 
           if (data.user) {
             const { data: profile } = await getProfile(data.user.id);
-            
+
             if (profile?.role === 'enfant' && !profile.is_approved) {
-              set({ 
+              set({
                 error: 'Votre compte est en attente d\'approbation parentale.',
-                isLoading: false 
+                isLoading: false,
               });
               return { error: new Error('Account not approved') };
+            }
+
+            // Parent : lier les enfants en attente (parent_email = mon email)
+            if (profile?.role === 'parent' && profile?.email) {
+              await linkPendingChildrenToParent(profile.id, profile.email);
             }
 
             set({

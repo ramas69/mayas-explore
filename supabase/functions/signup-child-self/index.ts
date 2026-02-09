@@ -81,6 +81,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Persister explicitement parent_email dans profiles (le trigger peut ne pas l'écrire correctement)
+    const profileParentEmail = parentId ? null : parentEmailTrimmed;
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .update({
+        parent_id: parentId,
+        parent_email: profileParentEmail,
+        full_name: fullName.trim(),
+        ...(classeValue && { classe: classeValue }),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', data.user.id);
+
+    if (profileErr) {
+      console.error('[signup-child-self] Erreur mise à jour profil:', profileErr);
+    }
+
     return new Response(
       JSON.stringify({ success: true, user: { id: data.user.id } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

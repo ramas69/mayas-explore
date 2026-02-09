@@ -21,6 +21,8 @@ interface SandboxState {
   getElements: () => unknown[];
   setLastMissionVictory: (payload: { artifactName: string; xp: number } | null) => void;
   dismissVictory: () => void;
+  /** Réinitialise le Grimoire (appelé au changement de session pour éviter les fuites de données) */
+  resetSandbox: () => void;
 }
 
 /** Pour que les updates soient undoables (commitToHistory) */
@@ -83,4 +85,13 @@ export const useSandboxStore = create<SandboxState>((set, get) => ({
   setLastMissionVictory: (payload) => set({ lastMissionVictory: payload }),
 
   dismissVictory: () => set({ lastMissionVictory: null }),
+
+  resetSandbox: () => {
+    set({
+      elements: [],
+      pendingElements: [],
+      imageToLoad: null,
+      excalidrawAPI: null,
+    });
+  },
 }));
