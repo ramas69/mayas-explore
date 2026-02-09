@@ -5,9 +5,17 @@ import type { Artifact } from '../types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Désactiver le lock Navigator pour éviter "The operation was aborted" (problème connu avec navigator.locks)
+const lockNoOp = async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn();
+
 // Types Database conservés dans src/types/database.ts pour référence future
 // Régénérer avec: npx supabase gen types typescript --project-id <ID> > src/types/database.ts
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    lock: lockNoOp,
+    lockAcquireTimeout: 5000,
+  },
+});
 
 // Trouver un parent par email
 export const findParentByEmail = async (email: string) => {
@@ -104,6 +112,7 @@ export const resendInviteChildByEmail = async (email: string, parentId: string) 
 };
 
 // Auth: Enfant s'inscrit seul avec email du parent (en attente de validation)
+// Utilise l'Edge Function signup-child-self (Admin API) pour éviter les problèmes de trigger
 export const signUpChildSelfRegister = async (
   email: string,
   password: string,
@@ -111,27 +120,36 @@ export const signUpChildSelfRegister = async (
   parentEmail: string,
   classe?: string
 ) => {
-  const { data: parent } = await findParentByEmail(parentEmail);
-  const parentId = parent?.id ?? null;
-
-  const validClasses = ['6ème', '5ème', '4ème', '3ème'];
-  const classeValue = classe && validClasses.includes(classe) ? classe : undefined;
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        role: 'enfant',
-        full_name: fullName,
-        parent_id: parentId,
-        parent_email: parentId ? null : parentEmail.toLowerCase().trim(),
-        is_approved: false, // toujours false : le parent doit valider
-        ...(classeValue && { classe: classeValue }),
+  try {
+    const { data, error } = await supabase.functions.invoke('signup-child-self', {
+      body: {
+        email: email.trim().toLowerCase(),
+        password,
+        fullName: fullName.trim(),
+        parentEmail: parentEmail.trim().toLowerCase(),
+        classe: classe || undefined,
       },
-    },
-  });
-  return { data, error };
+    });
+
+    if (error) {
+      if (error instanceof FunctionsHttpError && error.context) {
+        try {
+          const body = await (error.context as Response).json();
+          const msg = (body as { error?: string })?.error || error.message;
+          return { data: null, error: { message: msg } };
+        } catch {
+          /* fallback */
+        }
+      }
+      return { data: null, error: { message: error.message } };
+    }
+    if (data?.error) {
+      return { data: null, error: { message: (data as { error: string }).error } };
+    }
+    return { data: data as { user?: { id: string } }, error: null };
+  } catch (err) {
+    return { data: null, error: { message: (err as Error).message } };
+  }
 };
 
 export const signIn = async (email: string, password: string) => {

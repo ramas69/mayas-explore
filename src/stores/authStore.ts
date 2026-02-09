@@ -135,6 +135,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signUp: async (email, password, fullName, role, options) => {
+        const formatAuthError = (msg: string) => {
+          if (/already.*registered|already exists/i.test(msg)) return 'Un compte existe déjà avec cet email.';
+          if (/invalid.*password|password.*weak/i.test(msg)) return 'Le mot de passe doit contenir au moins 8 caractères.';
+          if (/invalid.*email|email.*invalid/i.test(msg)) return 'Adresse email invalide.';
+          if (/rate limit|too many/i.test(msg)) return 'Trop de tentatives. Réessaie dans quelques minutes.';
+          return msg;
+        };
         set({ isLoading: true, error: null });
         try {
           if (role === 'parent') {
@@ -169,7 +176,8 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: false });
           return {};
         } catch (error) {
-          set({ error: (error as Error).message, isLoading: false });
+          const msg = (error as Error).message;
+          set({ error: formatAuthError(msg), isLoading: false });
           return { error: error as Error };
         }
       },

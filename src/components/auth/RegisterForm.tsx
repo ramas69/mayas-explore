@@ -25,6 +25,22 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
     e.preventDefault();
     clearError();
 
+    if (role === 'enfant') {
+      const trimmedParent = parentEmail.trim().toLowerCase();
+      if (!trimmedParent) {
+        useAuthStore.setState({ error: 'L\'email du parent est requis.' });
+        return;
+      }
+      if (!classe || !['6ème', '5ème', '4ème', '3ème'].includes(classe)) {
+        useAuthStore.setState({ error: 'Veuillez sélectionner votre classe.' });
+        return;
+      }
+      if (email.trim().toLowerCase() === trimmedParent) {
+        useAuthStore.setState({ error: 'L\'email de l\'élève doit être différent de celui du parent.' });
+        return;
+      }
+    }
+
     const options =
       role === 'enfant'
         ? { parentEmail: parentEmail.trim().toLowerCase(), classe: classe || undefined }
@@ -48,7 +64,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         </h2>
         <p className="text-amber-100/60 mb-6">
           {role === 'enfant' 
-            ? 'Un email a été envoyé à tes parents pour validation. Tu recevras un message quand ton compte sera activé !'
+            ? 'Ta demande a été enregistrée ! Ton parent doit se connecter à Maya Explorer, aller dans Configuration, et valider ton compte. Tu pourras ensuite te connecter.'
             : 'Ton compte parent est créé. Tu peux maintenant ajouter tes enfants.'}
         </p>
         <button
