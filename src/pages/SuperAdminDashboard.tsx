@@ -32,10 +32,12 @@ import {
   TrendingUp,
   Star,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { ParticleEffects } from '../components/ParticleEffects';
 
 export function SuperAdminDashboard() {
+  const navigate = useNavigate();
   const { user, signOut } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'scraping' | 'programme' | 'utilisateurs'>('dashboard');
   const [selectedChild, setSelectedChild] = useState<{ id: string; full_name?: string; email: string } | null>(null);
@@ -307,7 +309,10 @@ export function SuperAdminDashboard() {
             {user?.email}
           </div>
           <button
-            onClick={() => signOut()}
+            onClick={async () => {
+              await signOut();
+              navigate('/auth', { replace: true });
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-amber-100/60 hover:bg-amber-500/10 hover:text-amber-400 transition-all"
           >
             <LogOut className="w-5 h-5 shrink-0" />

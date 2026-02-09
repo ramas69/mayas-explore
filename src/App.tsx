@@ -48,6 +48,7 @@ import { ProfileEditor } from './components/profile/ProfileEditor';
 import { ProgrammePage } from './components/programme/ProgrammePage';
 import { ParentProgramme } from './components/programme/ParentProgramme';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
+import { AuthCallback } from './pages/AuthCallback';
 import './App.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -286,7 +287,10 @@ function StudentApp() {
             {user?.full_name}
           </span>
           <button
-            onClick={() => signOut()}
+            onClick={async () => {
+              await signOut();
+              navigate('/auth', { replace: true });
+            }}
             className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-amber-100/60 hover:text-amber-400 transition-colors"
           >
             <LogOut className="w-5 h-5" />
@@ -561,7 +565,10 @@ function ParentApp() {
 
         <div className="p-4 border-t border-amber-500/20">
           <button
-            onClick={() => signOut()}
+            onClick={async () => {
+              await signOut();
+              navigate('/auth', { replace: true });
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-amber-100/60 hover:bg-amber-500/10 hover:text-amber-400 transition-all"
           >
             <LogOut className="w-5 h-5 shrink-0" />
@@ -674,6 +681,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/app" element={<Navigate to="/app/map" replace />} />
         <Route 
           path="/app/:tab" 

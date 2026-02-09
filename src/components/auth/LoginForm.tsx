@@ -12,7 +12,9 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, isLoading, error, clearError } = useAuthStore();
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const { signIn, resetPassword, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +60,14 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
       if (user?.role === 'parent') navigate('/parent');
       else if (user?.role === 'enfant') navigate('/app');
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    setResetSent(false);
+    const { error } = await resetPassword(email);
+    if (!error) setResetSent(true);
   };
 
   return (
@@ -106,7 +116,68 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
         </div>
       )}
 
-      {/* Form */}
+      {/* Mot de passe oublié */}
+      {forgotPasswordMode ? (
+        <div className="space-y-5">
+          {resetSent ? (
+            <>
+              <div className="stone-alert-success p-4 rounded-xl border border-amber-500/30 bg-amber-500/10">
+                <p className="text-sm text-amber-200">
+                  Un lien de réinitialisation a été envoyé à <strong>{email}</strong>. Vérifie ta boîte mail (et les spams).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForgotPasswordMode(false)}
+                className="w-full py-3 text-amber-400 hover:text-golden font-medium text-sm transition-colors"
+              >
+                ← Retour à la connexion
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-5">
+              <p className="text-amber-100/70 text-sm">
+                Saisis ton email pour recevoir un lien de réinitialisation.
+              </p>
+              <div className="login-field">
+                <label className="block text-sm font-medium text-amber-100/80 mb-2 tracking-wider">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3.5 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100 placeholder-amber-100/30 focus:outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 transition-all ease-temple"
+                  placeholder="ton@email.com"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="login-cta w-full py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-900 font-bold rounded-xl tracking-wider uppercase text-sm hover:shadow-2xl hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group relative overflow-hidden"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Envoi...
+                  </>
+                ) : (
+                  'Envoyer le lien'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setForgotPasswordMode(false)}
+                className="w-full py-3 text-amber-100/60 hover:text-amber-400 text-sm transition-colors"
+              >
+                ← Retour à la connexion
+              </button>
+            </form>
+          )}
+        </div>
+      ) : (
+      /* Form de connexion */
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="login-field">
           <label className="block text-sm font-medium text-amber-100/80 mb-2 tracking-wider">
@@ -123,9 +194,22 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
         </div>
 
         <div className="login-field">
-          <label className="block text-sm font-medium text-amber-100/80 mb-2 tracking-wider">
-            Mot de passe
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-amber-100/80 tracking-wider">
+              Mot de passe
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setForgotPasswordMode(true);
+                setResetSent(false);
+                clearError();
+              }}
+              className="text-xs text-amber-400/80 hover:text-amber-400 transition-colors"
+            >
+              Mot de passe oublié ?
+            </button>
+          </div>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
@@ -164,6 +248,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
           )}
         </button>
       </form>
+      )}
 
       {/* Divider */}
       <div className="section-divider my-6" />

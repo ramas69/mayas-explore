@@ -40,6 +40,7 @@ interface AuthState {
   inviteChildAccount: (email: string, fullName: string, classe?: string) => Promise<{ error?: Error }>;
   resendInviteChildAccount: (email: string) => Promise<{ email_sent?: boolean; action_link?: string; error?: Error }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error?: Error }>;
   approveChild: (childId: string) => Promise<void>;
   clearError: () => void;
 }
@@ -225,12 +226,27 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'global' });
         set({
           user: null,
           session: null,
           isAuthenticated: false,
         });
+      },
+
+      resetPassword: async (email: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          });
+          if (error) throw error;
+          set({ isLoading: false });
+          return {};
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+          return { error: error as Error };
+        }
       },
 
       approveChild: async (childId: string) => {
