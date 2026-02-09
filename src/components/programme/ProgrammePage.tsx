@@ -8,7 +8,8 @@ import { useCurriculumStore } from '../../stores/curriculumStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getProgrammePourClasse, SOCLE_COMMUN, generateProgrammeHtml, SUBJECT_ORDER, getProgrammeOfficielPdfUrl, PROGRAMMES_OFFICIELS_PDF } from '../../lib/programmeScolaire';
 import { recordProgrammeDownload, getLastProgrammeDownload, getProgrammeCollegeGlobalForClasse, addManualCurriculumEntry } from '../../lib/supabase';
-import { Download, FileText, Target, BookOpen, Eye, ExternalLink, Plus, Loader2 } from 'lucide-react';
+import { Download, FileText, Target, BookOpen, Eye, ExternalLink, Plus } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import type { Classe, Subject } from '../../types';
 
 export function ProgrammePage() {
@@ -259,7 +260,7 @@ export function ProgrammePage() {
               disabled={isAddingSource || !newSource.subject || !newSource.chapterName.trim()}
               className="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-xl disabled:opacity-50"
             >
-              {isAddingSource ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Ajouter'}
+              {isAddingSource ? <LoadingSpinner size="sm" className="inline" /> : 'Ajouter'}
             </button>
             <button onClick={() => setShowAddSource(false)} className="px-4 py-2 text-amber-100/60 hover:text-amber-400">
               Annuler

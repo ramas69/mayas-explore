@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
-import { Eye, EyeOff, Loader2, User, Users } from 'lucide-react';
+import { Eye, EyeOff, User, Users } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { StoneSelect } from '../ui/StoneSelect';
 import type { UserRole } from '../../types';
 
@@ -255,7 +256,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         >
           {isLoading ? (
             <>
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <LoadingSpinner size="sm" />
               Création...
             </>
           ) : (

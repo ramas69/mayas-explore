@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { gsap } from 'gsap';
-import { Compass, Eye, EyeOff, Loader2, Sparkles, ArrowLeft } from 'lucide-react';
+import { Compass, Eye, EyeOff, Sparkles, ArrowLeft } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 interface LoginFormProps {
   onToggleMode: () => void;
@@ -159,7 +160,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <LoadingSpinner size="sm" />
                     Envoi...
                   </>
                 ) : (
@@ -237,7 +238,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
           {isLoading ? (
             <>
-              <Loader2 className="w-5 h-5 animate-spin relative z-10" />
+              <LoadingSpinner size="sm" className="relative z-10" />
               <span className="relative z-10">Connexion...</span>
             </>
           ) : (

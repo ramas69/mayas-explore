@@ -19,7 +19,6 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  Loader2,
   Square,
   LayoutDashboard,
   LogOut,
@@ -35,6 +34,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { ParticleEffects } from '../components/ParticleEffects';
+import { PageLoading } from '../components/ui/PageLoading';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 export function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -242,8 +243,8 @@ export function SuperAdminDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
+      <div className="min-h-[400px]">
+        <PageLoading message="Chargement du tableau admin..." />
       </div>
     );
   }
@@ -500,7 +501,7 @@ export function SuperAdminDashboard() {
                   </button>
                 </div>
                 {childStatsLoading ? (
-                  <div className="flex justify-center py-12"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /></div>
+                  <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
                 ) : childStats ? (
                   <div className="space-y-6">
                     <div className="flex gap-4">
@@ -647,7 +648,7 @@ export function SuperAdminDashboard() {
                     title={(scrapeSubject || scrapeSubjectCustom) && scrapeClasse === 'Toutes' ? 'Choisir une classe pour scraper une matière' : ''}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 transition-all"
                   >
-                    {isScraping ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                    {isScraping ? <LoadingSpinner size="sm" /> : <RefreshCw className="w-5 h-5" />}
                     Scraper (Perplexity)
                   </button>
                   {isScraping && (
@@ -768,7 +769,7 @@ export function SuperAdminDashboard() {
                           title={`Mettre à jour la ${classe}`}
                           className="p-2 rounded-lg text-amber-400/70 hover:bg-amber-500/20 hover:text-amber-400 disabled:opacity-50 transition-all"
                         >
-                          {isScraping ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                          {isScraping ? <LoadingSpinner size="sm" /> : <RefreshCw className="w-4 h-4" />}
                         </button>
                       </div>
                     );

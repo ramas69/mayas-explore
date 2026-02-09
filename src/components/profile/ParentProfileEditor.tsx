@@ -4,7 +4,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { User, Loader2, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export function ParentProfileEditor() {
@@ -113,7 +114,7 @@ export function ParentProfileEditor() {
           className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {isSaving ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <LoadingSpinner size="sm" />
           ) : saved ? (
             <>
               <CheckCircle className="w-5 h-5" />
@@ -179,7 +180,7 @@ export function ParentProfileEditor() {
             disabled={isChangingPassword || !newPassword || !confirmPassword}
             className="w-full py-3 border border-amber-500/30 text-amber-400 rounded-xl font-medium hover:bg-amber-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-4 h-4" />}
+            {isChangingPassword ? <LoadingSpinner size="sm" /> : <Lock className="w-4 h-4" />}
             Changer le mot de passe
           </button>
         </form>

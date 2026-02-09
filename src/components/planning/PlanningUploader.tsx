@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../lib/supabase';
 import { pdfToImageUrls } from '../../lib/pdfToImages';
-import { Upload, FileText, Image, Loader2, CheckCircle, AlertCircle, Sparkles, ExternalLink, Trash2 } from 'lucide-react';
+import { Upload, FileText, Image, CheckCircle, AlertCircle, Sparkles, ExternalLink, Trash2 } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SchoolZone } from '../../types';
 
@@ -198,7 +199,7 @@ export function PlanningUploader({
         <input {...getInputProps()} />
         {isUploading || isAnalyzing ? (
           <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-10 h-10 text-amber-400 animate-spin" />
+            <LoadingSpinner size="lg" />
             <p className="text-amber-100 text-sm">{isUploading ? 'Upload en cours...' : 'IA analyse l\'emploi du temps et propose des créneaux...'}</p>
             {isAnalyzing && (
               <p className="text-amber-100/60 text-xs flex items-center gap-1">

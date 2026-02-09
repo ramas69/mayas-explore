@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { BulletinCard } from './BulletinCard';
-import { FileText, Loader2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
+import { PageLoading } from '../ui/PageLoading';
 import type { BulletinAnalysis } from '../../types';
 
 interface BulletinViewerProps {
@@ -33,9 +34,8 @@ export function BulletinViewer({ studentId, refreshTrigger }: BulletinViewerProp
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <Loader2 className="w-12 h-12 text-amber-400 animate-spin mb-4" />
-        <p className="text-amber-100/60">Chargement des bulletins...</p>
+      <div className="py-16">
+        <PageLoading message="Chargement des bulletins..." />
       </div>
     );
   }

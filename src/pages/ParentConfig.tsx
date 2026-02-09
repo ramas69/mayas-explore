@@ -13,11 +13,12 @@ import {
   FileText,
   Calendar,
   Target,
-  Loader2,
   CheckCircle,
   BookOpen,
   Reply,
 } from 'lucide-react';
+import { PageLoading } from '../components/ui/PageLoading';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { StoneSelect } from '../components/ui/StoneSelect';
 import type { Profile, Subject, SchoolZone } from '../types';
@@ -210,8 +211,8 @@ export function ParentConfig() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
+      <div className="min-h-[300px]">
+        <PageLoading message="Chargement de la configuration..." />
       </div>
     );
   }
@@ -381,7 +382,7 @@ export function ParentConfig() {
             disabled={isAddingChild}
             className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
           >
-            {isAddingChild ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+            {isAddingChild ? <LoadingSpinner size="sm" /> : <UserPlus className="w-5 h-5" />}
             {addChildMode === 'invite' ? 'Envoyer l\'invitation' : 'Rattacher'}
           </button>
         </form>
@@ -430,7 +431,7 @@ export function ParentConfig() {
                     className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-50 text-sm font-medium"
                   >
                     {resendingEmail === child.email ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <LoadingSpinner size="sm" />
                     ) : (
                       <Reply className="w-4 h-4" />
                     )}
@@ -498,7 +499,7 @@ export function ParentConfig() {
                 disabled={!prioritySubject || isSavingPriority}
                 className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
               >
-                {isSavingPriority ? <Loader2 className="w-5 h-5 animate-spin" /> : <Target className="w-5 h-5" />}
+                {isSavingPriority ? <LoadingSpinner size="sm" /> : <Target className="w-5 h-5" />}
                 Injecter la priorité
               </button>
             </div>

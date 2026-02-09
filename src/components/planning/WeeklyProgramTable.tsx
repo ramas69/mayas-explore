@@ -3,7 +3,8 @@
  * Utilisé dans Dashboard (lecture seule) et Configuration (édition des créneaux).
  */
 import { useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Sun, Loader2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Sun } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { isVacation } from '../../lib/schoolCalendars';
 import type { SchoolZone } from '../../types';
@@ -243,7 +244,7 @@ export function WeeklyProgramTable({
                 disabled={isSaving}
                 className="px-3 py-2 rounded-lg bg-amber-500 text-slate-900 font-medium hover:bg-amber-400 text-sm flex items-center gap-2 disabled:opacity-50"
               >
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {isSaving ? <LoadingSpinner size="sm" /> : null}
                 Enregistrer
               </button>
             </div>

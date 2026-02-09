@@ -35,6 +35,7 @@ import { PlanningViewer } from './components/planning/PlanningViewer';
 import { RewardModal } from './components/rewards/RewardModal';
 import { TempleViewer } from './components/temple/TempleViewer';
 import { Compass, Map, MessageSquare, Trophy, FileText, LogOut, LayoutDashboard, Settings, Menu, X, Calendar, User, BookOpen } from 'lucide-react';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
 
 const StudentTabsWithIcons = [
   { id: 'map' as const, label: 'Carte', icon: Map },
@@ -666,7 +667,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full" />
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -709,7 +710,7 @@ function App() {
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-            <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full" />
+            <LoadingSpinner size="lg" />
           </div>
           <p className="text-amber-100/60">Chargement...</p>
         </div>

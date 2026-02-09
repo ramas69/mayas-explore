@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, getProfile } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 /**
  * Page de callback après réinitialisation du mot de passe (lien email Supabase).
@@ -31,7 +32,7 @@ export function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-slate-900">
       <div className="text-center">
         <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-          <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full" />
+          <LoadingSpinner size="lg" />
         </div>
         <p className="text-amber-100/60">Connexion en cours...</p>
       </div>

@@ -3,6 +3,9 @@ import { supabase, getPendingChildApprovals, linkPendingChildrenToParent } from 
 import { useAuthStore } from '../../stores/authStore';
 import { WeeklyProgramTable } from '../planning/WeeklyProgramTable';
 import { StoneSelect } from '../ui/StoneSelect';
+import { PageLoading } from '../ui/PageLoading';
+import { ParentDashboardSkeleton } from '../ui/ParentDashboardSkeleton';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import {
   Users,
   UserPlus,
@@ -13,7 +16,6 @@ import {
   Calendar,
   MessageSquare,
   X,
-  Loader2,
   FileText,
   AlertTriangle,
   Settings,
@@ -47,6 +49,7 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
   const [pendingApprovals, setPendingApprovals] = useState<Profile[]>([]);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [showAddChild, setShowAddChild] = useState(false);
   const [addChildEmail, setAddChildEmail] = useState('');
@@ -62,8 +65,12 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
     }
   }, [user]);
 
-  const loadChildrenData = async () => {
-    setIsLoading(true);
+  const loadChildrenData = async (isRefresh = false) => {
+    if (isRefresh && children.length > 0) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
 
     // Lier les enfants qui viennent de s'inscrire (parent_email = mon email) — même si parent déjà connecté
     if (user?.id && user?.email) {
@@ -86,6 +93,7 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
       setChildren([]);
       setSelectedChild(null);
       setIsLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
@@ -154,6 +162,7 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
       setSelectedChild(childrenData[0].profile.id);
     }
     setIsLoading(false);
+    setIsRefreshing(false);
   };
 
   const handleAddChild = async (e: React.FormEvent) => {
@@ -174,7 +183,7 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
   const handleApproveChild = async (childId: string) => {
     clearError();
     await approveChild(childId);
-    loadChildrenData();
+    loadChildrenData(true);
   };
 
   const selectedChildData = children.find(c => c.profile.id === selectedChild);
@@ -217,8 +226,16 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full" />
+      <div className="min-h-[400px]">
+        <ParentDashboardSkeleton />
+      </div>
+    );
+  }
+
+  if (isRefreshing) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <PageLoading message="Mise à jour..." />
       </div>
     );
   }
@@ -307,12 +324,12 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
                   disabled={isAddingChild}
                   className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isAddingChild ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Création...
-                    </>
-                  ) : (
+                {isAddingChild ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    Création...
+                  </>
+                ) : (
                     'Créer le compte'
                   )}
                 </button>
@@ -710,7 +727,7 @@ export function ParentDashboard({ onNavigateToConfig }: ParentDashboardProps) {
               >
                 {isAddingChild ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <LoadingSpinner size="sm" />
                     Envoi en cours...
                   </>
                 ) : (

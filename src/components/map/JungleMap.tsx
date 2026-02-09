@@ -8,6 +8,7 @@ import { SUBJECT_ORDER } from '../../lib/programmeScolaire';
 import { getSubjectsFromBulletin, findBulletinDataForSubject } from '../../lib/subjectMapping';
 import { getGradeFromStatus } from '../../lib/bulletinUtils';
 import { SubjectCardModal } from './SubjectCardModal';
+import { PageLoading } from '../ui/PageLoading';
 
 interface JungleMapProps {
   studentId: string;
@@ -104,7 +105,7 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
   if (isLoading && curriculum.length === 0) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-12rem)]">
-        <div className="animate-spin w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full" />
+        <PageLoading message="Chargement de la carte..." />
       </div>
     );
   }

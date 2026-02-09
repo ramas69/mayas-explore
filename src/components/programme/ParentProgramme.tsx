@@ -8,7 +8,9 @@ import { useAuthStore } from '../../stores/authStore';
 import { getProgrammePourClasse, SOCLE_COMMUN, generateProgrammeHtml, SUBJECT_ORDER, getProgrammeOfficielPdfUrl, PROGRAMMES_OFFICIELS_PDF } from '../../lib/programmeScolaire';
 import { recordProgrammeDownload, getLastProgrammeDownload, getProgrammeCollegeGlobalForClasse, addManualCurriculumEntry } from '../../lib/supabase';
 import { StoneSelect } from '../ui/StoneSelect';
-import { Download, FileText, Target, BookOpen, Eye, Loader2, ExternalLink, Plus } from 'lucide-react';
+import { Download, FileText, Target, BookOpen, Eye, ExternalLink, Plus } from 'lucide-react';
+import { PageLoading } from '../ui/PageLoading';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import type { Profile, Curriculum, Classe, Subject } from '../../types';
 
 interface ChildProfile extends Profile {
@@ -141,8 +143,8 @@ export function ParentProgramme() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
+      <div className="min-h-[300px]">
+        <PageLoading message="Chargement du programme..." />
       </div>
     );
   }
@@ -338,7 +340,7 @@ export function ParentProgramme() {
                   disabled={isAddingSource || !newSource.subject || !newSource.chapterName.trim()}
                   className="px-4 py-2 bg-amber-500 text-slate-900 font-semibold rounded-xl disabled:opacity-50"
                 >
-                  {isAddingSource ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Ajouter'}
+                  {isAddingSource ? <LoadingSpinner size="sm" className="inline" /> : 'Ajouter'}
                 </button>
                 <button onClick={() => setShowAddSource(false)} className="px-4 py-2 text-amber-100/60 hover:text-amber-400">
                   Annuler

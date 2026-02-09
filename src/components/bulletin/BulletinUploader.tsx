@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, Image, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Image, AlertCircle, CheckCircle } from 'lucide-react';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { BulletinCard } from './BulletinCard';
 import { StoneSelect } from '../ui/StoneSelect';
 import { supabase } from '../../lib/supabase';
@@ -196,13 +197,13 @@ export function BulletinUploader({ studentId, onAnalysisComplete }: BulletinUplo
           <div className="text-center">
             {isUploading ? (
               <div className="flex flex-col items-center">
-                <Loader2 className="w-12 h-12 text-amber-400 animate-spin mb-4" />
+                <LoadingSpinner size="lg" className="mb-4" />
                 <p className="text-amber-100">Téléchargement en cours...</p>
               </div>
             ) : isAnalyzing ? (
               <div className="flex flex-col items-center">
                 <div className="relative mb-4">
-                  <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  <LoadingSpinner size="lg" />
                   <span className="absolute inset-0 flex items-center justify-center text-lg">🔍</span>
                 </div>
                 <p className="text-amber-100">L'Exploratrice analyse ton bulletin...</p>

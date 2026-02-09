@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, BookOpen, MessageSquare } from 'lucide-react';
+import { PageLoading } from '../ui/PageLoading';
 import { getSessions } from '../../lib/supabase';
 import type { Subject, Session } from '../../types';
 
@@ -65,8 +66,8 @@ export function GrimoireModal({ subject, studentId, onClose, onLoadSession }: Gr
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-amber-100/50">
-              <div className="animate-pulse">Chargement...</div>
+            <div className="py-12">
+              <PageLoading message="Chargement de l'historique..." />
             </div>
           ) : sessions.length === 0 ? (
             <div className="min-h-[200px] flex flex-col items-center justify-center gap-4 py-12 border-2 border-dashed border-amber-500/20 rounded-xl bg-slate-900/30">

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getVacations, getNextVacation } from '../../lib/schoolCalendars';
-import { Calendar, Loader2, FileText, MapPin, Trash2, ExternalLink } from 'lucide-react';
+import { Calendar, FileText, MapPin, Trash2, ExternalLink } from 'lucide-react';
+import { PageLoading } from '../ui/PageLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SchoolZone } from '../../types';
 import { WeeklyProgramTable, type PlanningSlot } from './WeeklyProgramTable';
@@ -78,9 +79,8 @@ export function PlanningViewer({ studentId, refreshTrigger, canEdit, onDeleted, 
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-3" />
-        <p className="text-amber-100/60 text-sm">Chargement du planning...</p>
+      <div className="py-12">
+        <PageLoading message="Chargement du planning..." />
       </div>
     );
   }
