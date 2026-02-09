@@ -13,7 +13,6 @@ const lockNoOp = async <R>(_name: string, _acquireTimeout: number, fn: () => Pro
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     lock: lockNoOp,
-    lockAcquireTimeout: 5000,
   },
 });
 
