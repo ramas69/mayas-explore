@@ -44,7 +44,7 @@ async function fetchWithTimeout(
 /** Récupère une URL d'image Wikimedia Commons. L'IA fournit un terme de recherche optimisé (ex: "heart diagram", "lung anatomy"). */
 async function fetchWikimediaImageUrl(topic: string): Promise<string | null> {
   const query = encodeURIComponent(topic.trim());
-  const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${query}&gsrlimit=8&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json&origin=*`;
+  const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${query}&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json&origin=*`;
   try {
     const res = await fetchWithTimeout(url, {
       timeoutMs: 10000,
@@ -56,10 +56,22 @@ async function fetchWikimediaImageUrl(topic: string): Promise<string | null> {
       console.log('[display_schema] Wikimedia recherche:', topic, '→ aucun résultat');
       return null;
     }
-    const first = Object.values(pages)[0] as { imageinfo?: { 0?: { url?: string } } };
-    const found = first?.imageinfo?.[0]?.url ?? null;
-    console.log('[display_schema] Wikimedia recherche:', topic, '→', found ? 'OK' : 'aucune URL');
-    return found;
+
+    // On cherche la première image valide (jpg, png, webp, svg)
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg'];
+    const candidates = Object.values(pages) as { imageinfo?: { 0?: { url?: string } } }[];
+
+    let foundUrl: string | null = null;
+    for (const page of candidates) {
+      const u = page?.imageinfo?.[0]?.url;
+      if (u && validExtensions.some(ext => u.toLowerCase().endsWith(ext))) {
+        foundUrl = u;
+        break;
+      }
+    }
+
+    console.log('[display_schema] Wikimedia recherche:', topic, '→', foundUrl ? 'OK' : 'aucune URL valide');
+    return foundUrl;
   } catch (err) {
     console.log('[display_schema] Wikimedia erreur pour:', topic, err);
     return null;
@@ -299,7 +311,7 @@ Deno.serve(async (req) => {
             properties: {
               topic: {
                 type: 'string',
-                description: "Terme de recherche pour Wikimedia Commons : anglais, format 'X diagram' ou 'X anatomy'. Adapte au concept demandé (toute matière).",
+                description: "Terme de recherche pour Wikimedia Commons : anglais, format 'X diagram' ou 'X anatomy'. Adapte au concept demandé (toute matière) et au NIVEAU SCOLAIRE. Précise 'human' pour l'anatomie.",
               },
             },
           },
@@ -368,13 +380,15 @@ OUTILS DISPONIBLES :
         : '';
 
     // Approche dynamique : l'IA décide quand appeler display_schema (pas de mots-clés en dur)
+    const contextLevel = classe ? `NIVEAU SCOLAIRE : ${classe}. ` : '';
     const schemaContext = `\n\n⚠️ GRIMMOIRE (IMPORTANT) :
+    ${contextLevel}Adapte TOUJOURS le contenu au niveau de l'élève (ex: 6ème = simple, 3ème = détaillé).
     1. MATHS / GÉOMÉTRIE :
        - Figures simples (triangle, carré, thalès...) : Appelle draw_schema(shape: "triangle" | "square" | "circle" | "pythagore" | "thales").
        - Concepts complexes (fonctions, graphiques, 3D...) : Appelle display_schema(topic: "anglais").
     2. AUTRES (SVT, Histoire, Français, Arts...) :
        - Appelle TOUJOURS display_schema(topic: "terme anglais") — format "X diagram", "X anatomy", "X map".
-       - Exemples : "heart diagram", "roman empire map", "sentence diagram", "mind map".
+       - Exemples : "human heart diagram" (ajoute 'human' pour l'anatomie), "roman empire map", "sentence diagram", "mind map".
     Jamais d'URL en dur. Annotations : flèches + texte uniquement.\n`;
 
     const imageContext = userImageBase64
