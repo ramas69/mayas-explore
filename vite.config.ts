@@ -20,43 +20,21 @@ export default defineConfig({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
-              return 'vendor-react';
+            // Keep React ecosystem together to avoid loading order issues
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-vendor';
             }
-            if (id.includes('@radix-ui')) {
-              return 'vendor-ui';
-            }
-            if (id.includes('lucide-react')) {
-              return 'vendor-icons';
+            // Large libraries that benefit from separate chunks
+            if (id.includes('@excalidraw')) {
+              return 'excalidraw';
             }
             if (id.includes('three') || id.includes('@react-three')) {
-              return 'vendor-three';
-            }
-            if (id.includes('@supabase')) {
-              return 'vendor-supabase';
-            }
-            if (id.includes('@excalidraw')) {
-              return 'vendor-excalidraw';
+              return 'three';
             }
             if (id.includes('pdfjs-dist')) {
-              return 'vendor-pdf';
+              return 'pdf';
             }
-            if (id.includes('lottie')) {
-              return 'vendor-lottie';
-            }
-            if (id.includes('date-fns')) {
-              return 'vendor-date';
-            }
-            if (id.includes('elkjs')) {
-              return 'vendor-elkjs';
-            }
-            if (id.includes('mermaid')) {
-              return 'vendor-mermaid';
-            }
-            if (id.includes('cytoscape')) {
-              return 'vendor-cytoscape';
-            }
-
+            // Everything else in one vendor chunk
             return 'vendor';
           }
         },
