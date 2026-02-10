@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type ExcalidrawAPI = {
-  updateScene: (opts: { elements?: unknown[]; captureUpdate?: string }) => void;
+  updateScene: (opts: { elements?: unknown[]; appState?: Record<string, unknown>; captureUpdate?: string }) => void;
   getSceneElements: () => unknown[];
   addFiles?: (files: { id: string; mimeType: string; dataURL: string }[]) => void;
 };

@@ -29,6 +29,17 @@ export function ExcalidrawSandbox({
   }, [excalidrawAPI, pendingElements, addElements]);
 
   useEffect(() => {
+    if (!excalidrawAPI) return;
+    // Force dark mode again to be sure (fixes sticky white background issue)
+    const timer = setTimeout(() => {
+      excalidrawAPI.updateScene({
+        appState: { viewBackgroundColor: '#0f172a', theme: 'dark' },
+      });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [excalidrawAPI, initialData]);
+
+  useEffect(() => {
     if (!imageToLoad || !excalidrawAPI) {
       return;
     }
@@ -112,6 +123,12 @@ export function ExcalidrawSandbox({
         return;
       }
       console.log('[ExcalidrawSandbox] API received, methods:', Object.keys(api));
+
+      // FORCE DARK MODE IMMEDIATELY (Fix for background reset on refresh)
+      api.updateScene({
+        appState: { viewBackgroundColor: '#0f172a', theme: 'dark' },
+      });
+
       // Bind methods to ensure they keep their context
       setExcalidrawAPI({
         updateScene: api.updateScene.bind(api),
@@ -177,8 +194,9 @@ export function ExcalidrawSandbox({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- elements viennent de convertToExcalidrawElements ou snapshot DB
             elements: initialElements as any,
             appState: {
-              viewBackgroundColor: '#0f172a',
               ...initialData?.appState,
+              viewBackgroundColor: '#0f172a',
+              theme: 'dark' as const,
             },
           }}
           onChange={handleChange}

@@ -80,7 +80,14 @@ export function StudentApp() {
       setCanvasForSessionId(null);
       getSessionById(currentSessionId).then(({ data }) => {
         const snap = (data as { canvas_snapshot?: { elements?: unknown[]; appState?: Record<string, unknown> } } | null)?.canvas_snapshot;
-        const payload = snap?.elements?.length ? { elements: snap.elements, appState: snap.appState } : null;
+        const payload = snap?.elements?.length ? {
+          elements: snap.elements,
+          appState: {
+            ...snap.appState,
+            viewBackgroundColor: '#0f172a',
+            theme: 'dark'
+          }
+        } : null;
         setCanvasInitialData(payload);
         setCanvasForSessionId(currentSessionId);
       });
