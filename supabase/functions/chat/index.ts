@@ -25,12 +25,31 @@ function err(message: string) {
   });
 }
 
+/** fetch avec timeout pour éviter les blocages */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit & { timeoutMs?: number } = {}
+): Promise<Response> {
+  const { timeoutMs = 15000, ...init } = options;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /** Récupère une URL d'image Wikimedia Commons. L'IA fournit un terme de recherche optimisé (ex: "heart diagram", "lung anatomy"). */
 async function fetchWikimediaImageUrl(topic: string): Promise<string | null> {
   const query = encodeURIComponent(topic.trim());
   const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${query}&gsrlimit=8&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json&origin=*`;
   try {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {
+      timeoutMs: 10000,
+      headers: { 'User-Agent': 'EdTech-Guardian/1.0 (education-project)' },
+    });
     const json = await res.json();
     const pages = json?.query?.pages;
     if (!pages || typeof pages !== 'object') {
@@ -58,44 +77,121 @@ function getCyclesForClasse(classe: string | null): ('Cycle 3' | 'Cycle 4')[] {
 async function fetchProgrammeOfficiel(cycles: ('Cycle 3' | 'Cycle 4')[]): Promise<string> {
   const allRecords: { descriptif: string; discipline: string; niveau: string }[] = [];
 
-  for (const cycle of cycles) {
-    const params = new URLSearchParams({
-      where: `niveau_d_enseignement = "${cycle}"`,
-      limit: '30',
-    });
-    const res = await fetch(`${API_PROGRAMMES_EDUCATION}?${params}`);
-    const json = await res.json();
-    if (json.results && Array.isArray(json.results)) {
-      for (const r of json.results) {
-        const descriptif = (r.descriptif || '').slice(0, 800);
-        allRecords.push({
-          descriptif,
-          discipline: r.discipline ?? '-',
-          niveau: r.niveau_d_enseignement ?? cycle,
-        });
+  try {
+    for (const cycle of cycles) {
+      const params = new URLSearchParams({
+        where: `niveau_d_enseignement = "${cycle}"`,
+        limit: '30',
+      });
+      const res = await fetchWithTimeout(
+        `${API_PROGRAMMES_EDUCATION}?${params}`,
+        { timeoutMs: 15000 }
+      );
+      const json = await res.json();
+      if (json.results && Array.isArray(json.results)) {
+        for (const r of json.results) {
+          const descriptif = (r.descriptif || '').slice(0, 800);
+          allRecords.push({
+            descriptif,
+            discipline: r.discipline ?? '-',
+            niveau: r.niveau_d_enseignement ?? cycle,
+          });
+        }
       }
     }
-  }
 
-  if (allRecords.length === 0) {
-    return 'Aucun programme trouvé. Vérifie la classe de l\'élève (6ème, 5ème, 4ème, 3ème).';
-  }
+    if (allRecords.length === 0) {
+      return 'Aucun programme trouvé. Vérifie la classe de l\'élève (6ème, 5ème, 4ème, 3ème).';
+    }
 
-  const grouped = allRecords.reduce(
-    (acc, r) => {
-      const key = `${r.niveau} - ${r.discipline}`;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(r.descriptif);
-      return acc;
-    },
-    {} as Record<string, string[]>
-  );
+    const grouped = allRecords.reduce(
+      (acc, r) => {
+        const key = `${r.niveau} - ${r.discipline}`;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(r.descriptif);
+        return acc;
+      },
+      {} as Record<string, string[]>
+    );
 
-  let out = '📚 Programme officiel (Éducation nationale) :\n\n';
-  for (const [key, descs] of Object.entries(grouped)) {
-    out += `### ${key}\n${descs.join('\n\n')}\n\n`;
+    let out = '📚 Programme officiel (Éducation nationale) :\n\n';
+    for (const [key, descs] of Object.entries(grouped)) {
+      out += `### ${key}\n${descs.join('\n\n')}\n\n`;
+    }
+    return out;
+  } catch (e) {
+    console.log('[get_programme_officiel] Erreur API:', e);
+    return "Impossible de récupérer le programme pour l'instant. Réessaie plus tard ou consulte l'onglet Programme ! 📚";
   }
-  return out;
+}
+
+/** Génère des éléments Excalidraw pour des formes mathématiques simples */
+function generateMathShape(shape: string): { elements: unknown[]; appState?: Record<string, unknown> } | null {
+  const S = { strokeColor: '#e2e8f0', strokeWidth: 2, roughness: 1, backgroundColor: 'transparent' };
+  const T = { fontSize: 20, strokeColor: '#ef4444' };
+  const center = { x: 400, y: 300 };
+
+  switch (shape.toLowerCase()) {
+    case 'triangle':
+    case 'triangle rectangle':
+      return {
+        elements: [
+          { type: 'line', x: 300, y: 300, points: [[0, 0], [200, 0], [0, -150], [0, 0]], ...S },
+          { type: 'text', x: 290, y: 310, text: 'A', ...T },
+          { type: 'text', x: 510, y: 310, text: 'B', ...T },
+          { type: 'text', x: 290, y: 130, text: 'C', ...T },
+        ],
+      };
+    case 'square':
+    case 'carré':
+      return {
+        elements: [
+          { type: 'rectangle', x: 300, y: 200, width: 200, height: 200, ...S },
+          { type: 'text', x: 390, y: 410, text: 'côté', ...T },
+        ],
+      };
+    case 'circle':
+    case 'cercle':
+      return {
+        elements: [
+          { type: 'ellipse', x: 300, y: 200, width: 200, height: 200, ...S },
+          { type: 'line', x: 400, y: 300, points: [[0, 0], [100, 0]], ...S },
+          { type: 'text', x: 440, y: 280, text: 'r', ...T },
+        ],
+      };
+    case 'pythagore':
+      return {
+        elements: [
+          { type: 'line', x: 300, y: 300, points: [[0, 0], [200, 0], [0, -150], [0, 0]], ...S },
+          { type: 'text', x: 380, y: 310, text: 'a', ...T },
+          { type: 'text', x: 270, y: 220, text: 'b', ...T },
+          { type: 'text', x: 410, y: 210, text: 'c (hypoténuse)', ...T },
+        ],
+      };
+    case 'thales':
+    case 'thalès':
+      return {
+        elements: [
+          { type: 'line', x: 300, y: 100, points: [[0, 0], [-100, 200]], ...S },
+          { type: 'line', x: 300, y: 100, points: [[0, 0], [100, 200]], ...S },
+          { type: 'line', x: 250, y: 200, points: [[0, 0], [100, 0]], strokeColor: '#ef4444', strokeWidth: 2 },
+          { type: 'line', x: 200, y: 300, points: [[0, 0], [200, 0]], strokeColor: '#ef4444', strokeWidth: 2 },
+          { type: 'text', x: 290, y: 80, text: 'A', ...T },
+          { type: 'text', x: 180, y: 310, text: 'B', ...T },
+          { type: 'text', x: 410, y: 310, text: 'C', ...T },
+        ],
+      };
+    case 'rectangle':
+      return {
+        elements: [
+          { type: 'rectangle', x: 300, y: 200, width: 300, height: 150, ...S },
+          { type: 'text', x: 400, y: 360, text: 'L', ...T },
+          { type: 'text', x: 610, y: 280, text: 'l', ...T },
+        ],
+      };
+    default:
+      return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -157,27 +253,15 @@ Deno.serve(async (req) => {
         function: {
           name: 'draw_schema',
           description:
-            "Dessine un schéma 2D (Excalidraw) pour illustrer ta réponse. Utilise-le dès qu'une explication visuelle aide, quelle que soit la matière. Style 'brouillon de cours' ou 'schéma d'élève'.",
+            "Dessine une figure géométrique simple. UTILISE CET OUTIL pour : triangle, carré, rectangle, cercle, pythagore, thales. SI CA NE MARCHE PAS ou pour concepts complexes (fonctions, etc.), appelle display_schema.",
           parameters: {
             type: 'object',
-            required: ['scene'],
+            required: ['shape'],
             properties: {
-              scene: {
-                type: 'object',
-                description: 'Scène Excalidraw avec elements (tableau) et optionnellement appState',
-                properties: {
-                  elements: {
-                    type: 'array',
-                    description:
-                      "Tableau d'éléments : rectangles {type:'rectangle',x,y,width,height}, ellipses {type:'ellipse',x,y,width,height}, flèches {type:'arrow',x,y,width,height}, texte {type:'text',x,y,text}, diamants {type:'diamond',x,y,width,height}",
-                    items: { type: 'object' },
-                  },
-                  appState: {
-                    type: 'object',
-                    description: 'État optionnel (viewBackgroundColor, etc.)',
-                  },
-                },
-                required: ['elements'],
+              shape: {
+                type: 'string',
+                enum: ['triangle', 'square', 'rectangle', 'circle', 'pythagore', 'thales'],
+                description: 'La forme à dessiner.',
               },
             },
           },
@@ -266,9 +350,9 @@ OUTILS DISPONIBLES :
 
 1. get_programme_officiel : Récupère le programme officiel. Utilise-le quand l'élève demande "charge mon programme", "récupère le programme", etc.
 
-2. draw_schema : Dessine un schéma 2D dans le chat (message). Utilise-le pour illustrer une réponse ponctuelle.
+2. draw_schema : Pour les MATHS/GÉOMÉTRIE. Appelle avec 'shape' = 'triangle', 'square', 'circle' ou 'pythagore'. Simple et robuste.
 
-3. update_sandbox : Schéma professionnel uniquement. Autorise UNIQUEMENT : flèches (arrow, strokeWidth:2, roughness:0) et labels texte. Interdit : cercles, ellipses, rectangles, diamants, freedraw. L'image (display_schema) est centrée x:80 y:60 400x300. Une flèche fine rouge + un label à côté.
+3. update_sandbox : Annotations sur IMAGE (display_schema) uniquement. Autorise UNIQUEMENT : flèches (arrow, strokeWidth:2, roughness:0) et labels texte. Interdit : cercles, ellipses, rectangles, diamants, freedraw. L'image (display_schema) est centrée x:80 y:60 400x300. Une flèche fine rouge + un label à côté.
 
 4. display_schema : Affiche une image (Wikimedia) dans le Grimoire. Extrais le sujet, choisis un terme anglais optimisé (format "X diagram" ou "X anatomy"), passe-le en topic — jamais d'URL en dur. Multi-matières. L'image est la seule source visuelle.
 
@@ -284,7 +368,14 @@ OUTILS DISPONIBLES :
         : '';
 
     // Approche dynamique : l'IA décide quand appeler display_schema (pas de mots-clés en dur)
-    const schemaContext = `\n\n⚠️ GRIMMOIRE : Si un concept gagne à être illustré (quelle que soit la matière), appelle display_schema(topic: "terme anglais") — format "X diagram" ou "X anatomy", adapté dynamiquement au sujet. Jamais d'URL en dur. Annotations : flèches + texte uniquement.\n`;
+    const schemaContext = `\n\n⚠️ GRIMMOIRE (IMPORTANT) :
+    1. MATHS / GÉOMÉTRIE :
+       - Figures simples (triangle, carré, thalès...) : Appelle draw_schema(shape: "triangle" | "square" | "circle" | "pythagore" | "thales").
+       - Concepts complexes (fonctions, graphiques, 3D...) : Appelle display_schema(topic: "anglais").
+    2. AUTRES (SVT, Histoire, Français, Arts...) :
+       - Appelle TOUJOURS display_schema(topic: "terme anglais") — format "X diagram", "X anatomy", "X map".
+       - Exemples : "heart diagram", "roman empire map", "sentence diagram", "mind map".
+    Jamais d'URL en dur. Annotations : flèches + texte uniquement.\n`;
 
     const imageContext = userImageBase64
       ? `\n\n--- IMAGE REÇUE ---\nL'élève a envoyé une photo (cahier, livre, leçon). Analyse le contenu visuellement. Dis "J'ai analysé ton grimoire" ou équivalent. Si tu ajoutes des annotations, utilise UNIQUEMENT des flèches fines (arrow, strokeWidth:2, roughness:0) et du texte — jamais de cercles ou formes remplies.\n`
@@ -294,9 +385,9 @@ OUTILS DISPONIBLES :
       { role: 'system', content: systemWithTools + sandboxContext + schemaContext + imageContext },
       ...(Array.isArray(history)
         ? history.slice(-10).map((m: { role?: string; content?: string }) => ({
-            role: (m.role === 'assistant' ? 'assistant' : 'user') as string,
-            content: (m.content || '').toString(),
-          }))
+          role: (m.role === 'assistant' ? 'assistant' : 'user') as string,
+          content: (m.content || '').toString(),
+        }))
         : []),
     ];
 
@@ -332,14 +423,28 @@ OUTILS DISPONIBLES :
 
     while (iterations < maxIterations) {
       // tool_choice reste 'auto' : l'IA décide dynamiquement d'appeler display_schema ou non
-      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify(openaiPayload),
-      });
+      let openaiResponse: Response;
+      try {
+        openaiResponse = await fetchWithTimeout(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${openaiKey}`,
+            },
+            body: JSON.stringify(openaiPayload),
+            timeoutMs: 45000,
+          }
+        );
+      } catch (e) {
+        const isAbort = (e as Error).name === 'AbortError';
+        return err(
+          isAbort
+            ? "Le mentor met trop de temps à répondre. Réessaie dans un instant ! 🏕️"
+            : (e as Error).message
+        );
+      }
 
       if (!openaiResponse.ok) {
         const errData = await openaiResponse.text();
@@ -371,6 +476,7 @@ OUTILS DISPONIBLES :
             artifact_name?: string;
             subject?: string;
             guardian_name?: string;
+            shape?: string;
           } = {};
           try {
             args = fn?.arguments ? JSON.parse(fn.arguments) : {};
@@ -386,16 +492,22 @@ OUTILS DISPONIBLES :
               content: programmeText,
               tool_call_id: tc.id,
             } as { role: string; content: string });
-          } else if (name === 'draw_schema' && args.scene?.elements?.length) {
-            collectedDrawing = {
-              elements: args.scene.elements,
-              appState: args.scene.appState ?? { viewBackgroundColor: '#1e293b' },
-            };
-            messages.push({
-              role: 'tool',
-              content: 'Schéma dessiné avec succès ! L\'interface affichera le dessin à l\'élève. Tu peux compléter ta réponse avec une explication courte.',
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
+          } else if (name === 'draw_schema' && args.shape) {
+            const predefined = generateMathShape(args.shape);
+            if (predefined) {
+              collectedDrawing = predefined;
+              messages.push({
+                role: 'tool',
+                content: `Figure ${args.shape} dessinée avec succès.`,
+                tool_call_id: tc.id,
+              } as { role: string; content: string });
+            } else {
+              messages.push({
+                role: 'tool',
+                content: `Forme ${args.shape} non supportée. Utilise 'triangle', 'square', 'circle' ou 'pythagore'.`,
+                tool_call_id: tc.id,
+              } as { role: string; content: string });
+            }
           } else if (name === 'display_schema' && args.topic) {
             console.log('[display_schema] Appel display_schema topic:', args.topic);
             const imgUrl = await fetchWikimediaImageUrl(args.topic);

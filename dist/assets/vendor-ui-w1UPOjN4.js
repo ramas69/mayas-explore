@@ -1,0 +1,1 @@
+function u(e,t,{checkForDefaultPrevented:r=!0}={}){return function(n){if(e?.(n),r===!1||!n.defaultPrevented)return t?.(n)}}function f(e,[t,r]){return Math.min(r,Math.max(t,e))}function o(e,t,{checkForDefaultPrevented:r=!0}={}){return function(n){if(e?.(n),r===!1||!n.defaultPrevented)return t?.(n)}}export{f as a,o as b,u as c};

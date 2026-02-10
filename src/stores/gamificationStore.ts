@@ -7,8 +7,8 @@ interface GamificationState {
   isLoading: boolean;
   currentXP: number;
   showReward: boolean;
-  lastReward: { type: 'xp' | 'artifact' | 'temple'; value: any } | null;
-  
+  lastReward: { type: 'xp'; value: number } | { type: 'artifact'; value: Artifact } | { type: 'temple'; value: number } | null;
+
   // Actions
   loadGamification: (studentId: string) => Promise<void>;
   earnXP: (studentId: string, amount: number) => Promise<void>;
@@ -45,7 +45,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
 
     const oldStage = gamification.temple_evolution_stage;
     const newXP = gamification.xp + amount;
-    
+
     // Calculate new stage
     let newStage = oldStage;
     for (let i = TEMPLE_EVOLUTION_THRESHOLDS.length - 1; i >= 0; i--) {
@@ -108,7 +108,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
     set({ showReward: false, lastReward: null });
   },
 
-  showMissionReward: async (studentId: string, artifact: Artifact, _xp: number) => {
+  showMissionReward: async (studentId: string, artifact: Artifact) => {
     set({ showReward: true, lastReward: { type: 'artifact' as const, value: artifact } });
     get().loadGamification(studentId);
   },

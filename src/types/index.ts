@@ -112,7 +112,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   has_drawing?: boolean;
-  drawing_data?: any;
+  drawing_data?: unknown;
 }
 
 export type BulletinSubjectStatus = 'ok' | 'reviser' | 'surveiller' | 'danger';

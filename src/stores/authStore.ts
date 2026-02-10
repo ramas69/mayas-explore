@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Session } from '@supabase/supabase-js';
 import {
   supabase,
   getProfile,
@@ -21,7 +22,7 @@ export type SignUpOptions = {
 
 interface AuthState {
   user: Profile | null;
-  session: any | null;
+  session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;

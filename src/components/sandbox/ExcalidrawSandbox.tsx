@@ -23,24 +23,23 @@ export function ExcalidrawSandbox({
 
   useEffect(() => {
     if (excalidrawAPI && pendingElements.length > 0) {
-      console.log('[ExcalidrawSandbox] useEffect: application pending', { count: pendingElements.length });
       addElements(pendingElements);
       useSandboxStore.setState({ pendingElements: [] });
     }
   }, [excalidrawAPI, pendingElements, addElements]);
 
   useEffect(() => {
-    if (imageToLoad) console.log('[ExcalidrawSandbox] imageToLoad reçu', imageToLoad.slice(0, 80) + '...');
     if (!imageToLoad || !excalidrawAPI) {
-      if (imageToLoad && !excalidrawAPI) console.log('[ExcalidrawSandbox] imageToLoad présent mais excalidrawAPI pas encore prêt');
       return;
     }
+    console.log('[ExcalidrawSandbox] Loading image:', imageToLoad);
     const url = imageToLoad;
     clearImageToLoad();
-    console.log('[ExcalidrawSandbox] Chargement image dans canvas...', url.slice(0, 60) + '...');
     (async () => {
       try {
+        console.log('[ExcalidrawSandbox] Fetching...', url);
         const res = await fetch(url);
+        if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
         const blob = await res.blob();
         const mimeType = blob.type || 'image/png';
         const reader = new FileReader();
@@ -48,11 +47,19 @@ export function ExcalidrawSandbox({
           reader.onload = () => resolve(reader.result as string);
           reader.readAsDataURL(blob);
         });
+
         const fileId = `img-${Date.now()}` as const;
+        console.log('[ExcalidrawSandbox] File prepared:', { fileId, mimeType, dataUrlLen: dataURL.length });
+
         if (excalidrawAPI.addFiles) {
+          console.log('[ExcalidrawSandbox] Calling addFiles...');
           excalidrawAPI.addFiles([{ id: fileId, mimeType, dataURL }]);
+        } else {
+          console.warn('[ExcalidrawSandbox] addFiles is missing from API!');
         }
+
         const current = (excalidrawAPI.getSceneElements?.() ?? []) as unknown[];
+        // ... rest of code
         const imgEl = {
           type: 'image',
           id: `img-el-${Date.now()}`,
@@ -90,29 +97,26 @@ export function ExcalidrawSandbox({
         const merged = [imgEl, ...current];
         excalidrawAPI.updateScene?.({ elements: merged, captureUpdate: 'IMMEDIATELY' as const });
         setElements(merged);
-        console.log('[ExcalidrawSandbox] Image chargée avec succès dans le canvas');
+        console.log('[ExcalidrawSandbox] Image element added to scene');
       } catch (e) {
-        console.error('[ExcalidrawSandbox] autoLoadImage erreur', e);
+        console.error('[ExcalidrawSandbox] autoLoadImage error', e);
       }
     })();
   }, [imageToLoad, excalidrawAPI, clearImageToLoad, setElements]);
 
   const handleExcalidrawAPI = useCallback(
-    (
-      api: {
-        updateScene: (opts: { elements?: unknown[] }) => void;
-        getSceneElements: () => unknown[];
-        addFiles?: (files: { id: string; mimeType: string; dataURL: string }[]) => void;
-      } | null
-    ) => {
+    (api: any) => {
       if (!api) {
+        console.log('[ExcalidrawSandbox] API is null');
         setExcalidrawAPI(null);
         return;
       }
+      console.log('[ExcalidrawSandbox] API received, methods:', Object.keys(api));
+      // Bind methods to ensure they keep their context
       setExcalidrawAPI({
-        updateScene: (opts) => api.updateScene(opts),
-        getSceneElements: () => api.getSceneElements(),
-        addFiles: api.addFiles,
+        updateScene: api.updateScene.bind(api),
+        getSceneElements: api.getSceneElements.bind(api),
+        addFiles: api.addFiles ? api.addFiles.bind(api) : undefined,
       });
     },
     [setExcalidrawAPI]

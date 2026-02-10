@@ -35,11 +35,10 @@ function GuardianPicker({ onSelectGuardian }: { onSelectGuardian: (subject: Subj
                     onSelectGuardian(group.subjects[0]);
                   }
                 }}
-                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-left group ${
-                  isExpanded
-                    ? 'bg-amber-500/20 border-amber-500/50'
-                    : 'bg-slate-800/60 border-amber-500/20 hover:bg-amber-500/15 hover:border-amber-500/40'
-                }`}
+                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-left group ${isExpanded
+                  ? 'bg-amber-500/20 border-amber-500/50'
+                  : 'bg-slate-800/60 border-amber-500/20 hover:bg-amber-500/15 hover:border-amber-500/40'
+                  }`}
               >
                 <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 group-hover:bg-amber-500/30 relative">
                   <img src={MENTOR_AVATAR} alt="" className="w-10 h-10 rounded-full object-cover" />
@@ -103,7 +102,10 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
   const hasValidSession = sessionId && sessionId !== 'demo-session';
   const showGuardianPicker = !selectedChapter && onSelectGuardian;
 
+  console.log('[ChatInterface] Render:', { sessionId, hasValidSession, selectedChapter, showGuardianPicker });
+
   useEffect(() => {
+    console.log('[ChatInterface] useEffect sessionId changed:', sessionId);
     if (hasValidSession) loadMessages(sessionId);
     else clearChat();
   }, [sessionId, hasValidSession, loadMessages, clearChat]);
@@ -114,15 +116,15 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
 
   const chatContext = selectedChapter
     ? {
-        subject: selectedChapter.subject,
-        chapterName: selectedChapter.chapter_name,
-        chapterId: selectedChapter.id,
-        chapterStatus: selectedChapter.status,
-        curriculumChapters: getChaptersBySubject(selectedChapter.subject).map((c) => ({
-          chapter_name: c.chapter_name,
-          status: c.status,
-        })),
-      }
+      subject: selectedChapter.subject,
+      chapterName: selectedChapter.chapter_name,
+      chapterId: selectedChapter.id,
+      chapterStatus: selectedChapter.status,
+      curriculumChapters: getChaptersBySubject(selectedChapter.subject).map((c) => ({
+        chapter_name: c.chapter_name,
+        status: c.status,
+      })),
+    }
     : undefined;
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,6 +158,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
   };
 
   const mentor = selectedChapter ? getMentorForSubject(selectedChapter.subject) : null;
+  console.log('[ChatInterface] Derived mentor:', mentor, 'for subject:', selectedChapter?.subject);
 
   const handleRedirectConfirm = () => {
     if (!redirectModalToShow) return;
@@ -170,16 +173,16 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
 
   const quickActions = selectedChapter
     ? [
-        { label: `Aide-moi avec ${selectedChapter.chapter_name}`, icon: Sparkles },
-        { label: 'Explique-moi ce chapitre', icon: BookOpen },
-        { label: 'Je suis fatigué...', icon: MapPin },
-      ]
+      { label: `Aide-moi avec ${selectedChapter.chapter_name}`, icon: Sparkles },
+      { label: 'Explique-moi ce chapitre', icon: BookOpen },
+      { label: 'Je suis fatigué...', icon: MapPin },
+    ]
     : [
-        { label: 'Aide-moi avec ce problème', icon: Sparkles },
-        { label: 'Charge mon programme officiel', icon: BookOpen },
-        { label: 'Je suis fatigué...', icon: MapPin },
-        { label: 'Explique-moi encore', icon: Sparkles },
-      ];
+      { label: 'Aide-moi avec ce problème', icon: Sparkles },
+      { label: 'Charge mon programme officiel', icon: BookOpen },
+      { label: 'Je suis fatigué...', icon: MapPin },
+      { label: 'Explique-moi encore', icon: Sparkles },
+    ];
 
   return (
     <div className="flex flex-col h-full min-h-0 stone-card rounded-xl sm:rounded-2xl overflow-hidden">
@@ -271,7 +274,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
             <p className="text-amber-100/60 text-sm max-w-xs mx-auto">
               Je suis ton mentor. Ensemble, nous allons découvrir les secrets de ce chapitre !
             </p>
-            
+
             {/* Quick Actions */}
             <div className="mt-6 flex flex-wrap justify-center gap-2">
               {quickActions.map((action, i) => (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Quote, ChevronLeft, ChevronRight, Star } from 'lucide-react';
@@ -90,35 +90,24 @@ export function Testimonials() {
     return () => ctx.revert();
   }, []);
 
-  // Auto-rotate
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isAnimating) {
-        goToNext();
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeIndex, isAnimating]);
-
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     if (isAnimating) return;
     setIsAnimating(true);
     setActiveIndex((prev) => (prev + 1) % testimonials.length);
     setTimeout(() => setIsAnimating(false), 500);
-  };
+  }, [isAnimating]);
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     if (isAnimating) return;
     setIsAnimating(true);
     setActiveIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length);
     setTimeout(() => setIsAnimating(false), 500);
-  };
+  }, [isAnimating]);
 
   const getCardStyle = (index: number) => {
     const diff = index - activeIndex;
     const normalizedDiff = ((diff + testimonials.length) % testimonials.length);
-    
+
     if (normalizedDiff === 0) {
       return {
         transform: 'translateX(0) scale(1) rotateY(0deg)',
@@ -145,6 +134,16 @@ export function Testimonials() {
       };
     }
   };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isAnimating) {
+        goToNext();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeIndex, isAnimating, goToNext]);
 
   return (
     <section ref={sectionRef} className="relative py-24 z-10 overflow-hidden">
@@ -223,11 +222,10 @@ export function Testimonials() {
                     setTimeout(() => setIsAnimating(false), 500);
                   }
                 }}
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  index === activeIndex
-                    ? 'bg-amber-400 w-8'
-                    : 'bg-amber-500/30 hover:bg-amber-500/50'
-                }`}
+                className={`w-3 h-3 rounded-full transition-all duration-300 ${index === activeIndex
+                  ? 'bg-amber-400 w-8'
+                  : 'bg-amber-500/30 hover:bg-amber-500/50'
+                  }`}
               />
             ))}
           </div>

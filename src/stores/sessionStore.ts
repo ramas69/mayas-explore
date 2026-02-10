@@ -9,7 +9,8 @@ interface SessionState {
   startTime: Date | null;
   elapsedMinutes: number;
   dailyMinutesUsed: number;
-  
+  timerId: ReturnType<typeof setInterval> | null;
+
   // Actions
   startNewSession: (studentId: string, subject?: Subject, chapter?: string) => Promise<void>;
   endCurrentSession: (studentId: string, xpEarned: number, artifacts: string[]) => Promise<void>;
@@ -25,6 +26,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   startTime: null,
   elapsedMinutes: 0,
   dailyMinutesUsed: 0,
+  timerId: null,
 
   startNewSession: async (studentId: string, subject?: Subject, chapter?: string) => {
     const { data: profile } = await getProfile(studentId);
@@ -35,35 +37,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     const { data, error } = await startSession(studentId, subject, chapter);
-    
+
     if (error) throw error;
-    
+
     if (data) {
+      // Clear any existing timer
+      const existingTimer = get().timerId;
+      if (existingTimer) clearInterval(existingTimer);
+
+      const timer = setInterval(() => {
+        get().updateElapsedTime();
+      }, 60000); // Update every minute
+
       set({
         currentSession: data,
         isActive: true,
         startTime: new Date(),
         elapsedMinutes: 0,
         dailyMinutesUsed: dailyUsed,
+        timerId: timer
       });
-
-      // Start timer
-      const timer = setInterval(() => {
-        get().updateElapsedTime();
-      }, 60000); // Update every minute
-
-      // Store timer reference
-      (window as any).sessionTimer = timer;
     }
   },
 
   endCurrentSession: async (studentId: string, xpEarned: number, artifacts: string[]) => {
-    const { currentSession } = get();
+    const { currentSession, timerId } = get();
     if (!currentSession) return;
 
     // Clear timer
-    if ((window as any).sessionTimer) {
-      clearInterval((window as any).sessionTimer);
+    if (timerId) {
+      clearInterval(timerId);
     }
 
     await endSession(currentSession.id, xpEarned, artifacts);
@@ -73,6 +76,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       isActive: false,
       startTime: null,
       elapsedMinutes: 0,
+      timerId: null
     });
 
     // Reload sessions

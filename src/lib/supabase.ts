@@ -207,6 +207,18 @@ export const getPendingChildApprovals = async (parentId: string) => {
   return { data, error };
 };
 
+// Notes parent pour l'élève (injecteur de priorité) — l'élève peut les lire via RLS
+export const getParentNotesForStudent = async (studentId: string) => {
+  const { data, error } = await supabase
+    .from('parent_notes')
+    .select('content, objective, created_at')
+    .eq('student_id', studentId)
+    .like('objective', 'inject_priority:%')
+    .order('created_at', { ascending: false })
+    .limit(5);
+  return { data: data || [], error };
+};
+
 // Enfants en attente via parent_email (parent pas encore inscrit)
 export const getPendingChildrenByParentEmail = async (parentEmail: string) => {
   const { data, error } = await supabase
