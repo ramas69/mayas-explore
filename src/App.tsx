@@ -14,6 +14,7 @@ import { CTA } from './sections/CTA';
 import { Footer } from './sections/Footer';
 import { NotFound } from './pages/NotFound';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { Toaster } from 'sonner';
 import './App.css';
 
 // Lazy load pages
@@ -123,6 +124,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster position="top-center" richColors theme="dark" />
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-slate-900">
           <LoadingSpinner size="lg" />

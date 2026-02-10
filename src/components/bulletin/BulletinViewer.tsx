@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { BulletinCard } from './BulletinCard';
-import { FileText } from 'lucide-react';
+import { FileText, Calendar } from 'lucide-react';
 import { PageLoading } from '../ui/PageLoading';
 import type { BulletinAnalysis } from '../../types';
 
@@ -9,9 +9,10 @@ interface BulletinViewerProps {
   studentId: string;
   /** Incrémenter pour forcer le rechargement (ex: après nouvel upload) */
   refreshTrigger?: number;
+  onGeneratePlanning?: () => void;
 }
 
-export function BulletinViewer({ studentId, refreshTrigger }: BulletinViewerProps) {
+export function BulletinViewer({ studentId, refreshTrigger, onGeneratePlanning }: BulletinViewerProps) {
   const [bulletins, setBulletins] = useState<BulletinAnalysis[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,11 +68,10 @@ export function BulletinViewer({ studentId, refreshTrigger }: BulletinViewerProp
             <button
               key={b.id}
               onClick={() => setSelectedId(b.id)}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
-                selected?.id === b.id
-                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-100'
-                  : 'bg-slate-900/50 border border-transparent text-amber-100/70 hover:bg-amber-500/10'
-              }`}
+              className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selected?.id === b.id
+                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-100'
+                : 'bg-slate-900/50 border border-transparent text-amber-100/70 hover:bg-amber-500/10'
+                }`}
             >
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-amber-400" />
@@ -88,7 +88,19 @@ export function BulletinViewer({ studentId, refreshTrigger }: BulletinViewerProp
         </div>
 
         {/* Détail de l'analyse sélectionnée */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          {selected && onGeneratePlanning && (
+            <div className="flex justify-end">
+              <button
+                onClick={onGeneratePlanning}
+                className="py-2.5 px-5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 transition-all flex items-center gap-2 shadow-lg shadow-amber-900/20 text-sm"
+              >
+                <Calendar className="w-4 h-4" />
+                Proposer un planning de révisions
+              </button>
+            </div>
+          )}
+
           {selected && (
             <BulletinCard
               analysis={selected}

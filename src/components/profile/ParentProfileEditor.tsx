@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { User, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { toast } from 'sonner';
 
 export function ParentProfileEditor() {
   const { user, initialize } = useAuthStore();
@@ -40,7 +41,7 @@ export function ParentProfileEditor() {
         .eq('id', user.id);
       await initialize();
       setSaved(true);
-    } catch (_) {}
+    } catch (_) { }
     setIsSaving(false);
   };
 
@@ -56,21 +57,76 @@ export function ParentProfileEditor() {
       return;
     }
     setPendingPassword({ new: newPassword, confirm: confirmPassword });
-    setShowPasswordConfirm(true);
+
+    // Bypass ConfirmDialog to avoid UI/Supabase Client issues
+    if (window.confirm("Confirmer le changement de mot de passe ?")) {
+      handleConfirmPasswordChange(newPassword);
+    }
   };
 
-  const handleConfirmPasswordChange = async () => {
+  const handleConfirmPasswordChange = async (targetPassword?: string) => {
     setPasswordError(null);
     setPasswordSuccess(false);
     setIsChangingPassword(true);
+
+    // Use argument if provided (sync), otherwise pending (async state from previous render?)
+    const passwordToUse = targetPassword || pendingPassword.new;
+
     try {
-      const { error } = await supabase.auth.updateUser({ password: pendingPassword.new });
-      if (error) throw error;
+      console.log('[DEBUG] ParentProfileEditor: Starting password change (Direct API)...');
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
+      const session = sessionData.session;
+      if (!session) throw new Error("Session expirée. Reconnectez-vous.");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Configuration Supabase manquante (URL/KEY)");
+      }
+
+      console.log('[DEBUG] Sending direct PUT to /auth/v1/user ...');
+
+      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({ password: passwordToUse })
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        console.error('[DEBUG] Direct fetch error:', responseData);
+        throw new Error(responseData.msg || responseData.error_description || responseData.message || "Erreur mise à jour");
+      }
+
+      console.log('[DEBUG] Parent Success:', responseData);
+
+      // Attempt refresh but don't crash if it fails/hangs 
+      // (Supabase client might still be locked/broken locally)
+      try {
+        await supabase.auth.refreshSession();
+      } catch (e) {
+        console.warn('[DEBUG] Session refresh skipped/failed:', e);
+      }
+
       setNewPassword('');
       setConfirmPassword('');
       setPasswordSuccess(true);
+      toast.success("Mot de passe modifié avec succès !");
     } catch (err) {
-      setPasswordError((err as Error).message);
+      console.error('[ParentProfileEditor] Failed:', err);
+      const msg = (err as Error).message;
+      setPasswordError(msg);
+      toast.error(`Erreur: ${msg}`);
+      throw err;
     } finally {
       setIsChangingPassword(false);
     }

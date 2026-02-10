@@ -85,23 +85,48 @@ export function PlanningUploader({
           body = { fileUrl, fileType, studentId, cityZone, bulletinSubjects };
         }
 
-        const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-        if (sessionError || !session?.access_token) {
+        /*
+        // Refresh session causes hang on some clients
+        // const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+        */
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData.session;
+
+        if (!session?.access_token) {
           throw new Error('Session expirée. Reconnecte-toi.');
         }
 
-        const { data: analysisResult, error: analysisError } = await supabase.functions.invoke(
-          'analyze-planning',
-          {
-            body,
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          }
-        );
+        console.log('[PlanningUploader] Calling analyze-planning via direct fetch...');
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const functionUrl = `${supabaseUrl}/functions/v1/analyze-planning`;
 
+        const response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(body)
+        });
+
+        let analysisResult;
+        try {
+          analysisResult = await response.json();
+        } catch (e) {
+          throw new Error("Réponse invalide du serveur d'analyse planning");
+        }
+
+        if (!response.ok) {
+          const msg = analysisResult?.error || analysisResult?.message || "Erreur lors de l'analyse";
+          throw new Error(msg);
+        }
+
+        /*
         if (analysisError) {
           const msg = (analysisError as { error?: string }).error ?? analysisError.message;
           throw new Error(msg);
         }
+        */
         if (!analysisResult || analysisResult.error) {
           throw new Error(analysisResult?.error || 'Échec de l\'analyse IA');
         }
@@ -109,6 +134,7 @@ export function PlanningUploader({
         const slots = Array.isArray(analysisResult.slots) ? analysisResult.slots : [];
         const vacationSlots = Array.isArray(analysisResult.vacation_slots) ? analysisResult.vacation_slots : [];
 
+        /*
         await supabase.from('planning').upsert(
           {
             student_id: studentId,
@@ -117,6 +143,31 @@ export function PlanningUploader({
           },
           { onConflict: 'student_id' }
         );
+        */
+
+        // Calling REST API directly for upsert to avoid client hang
+        console.log('[PlanningUploader] Saving planning via direct REST fetch...');
+        const restUrl = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/planning`;
+        const upsertResponse = await fetch(restUrl + '?on_conflict=student_id', {
+          method: 'POST', // POST for insert/upsert
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Prefer': 'resolution=merge-duplicates' // vital for UPSERT behavior
+          },
+          body: JSON.stringify({
+            student_id: studentId,
+            city_zone: cityZone,
+            weekly_slots: { file_url: fileUrl, file_type: fileType, slots, vacation_slots: vacationSlots }
+          })
+        });
+
+        if (!upsertResponse.ok) {
+          const errorText = await upsertResponse.text();
+          console.error('Upsert failed:', errorText);
+          throw new Error("Erreur sauvegarde planning (REST)");
+        }
 
         setUploadedFile(fileUrl);
         onUploadComplete?.(fileUrl, fileType);
@@ -190,11 +241,10 @@ export function PlanningUploader({
       )}
       <div
         {...getRootProps()}
-        className={`p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-          isDragActive
-            ? 'border-amber-400 bg-amber-500/10'
-            : 'border-amber-500/30 hover:border-amber-400/50 hover:bg-amber-500/5'
-        }`}
+        className={`p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all ${isDragActive
+          ? 'border-amber-400 bg-amber-500/10'
+          : 'border-amber-500/30 hover:border-amber-400/50 hover:bg-amber-500/5'
+          }`}
       >
         <input {...getInputProps()} />
         {isUploading || isAnalyzing ? (

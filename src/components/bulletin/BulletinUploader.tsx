@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, Image, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Image, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { BulletinCard } from './BulletinCard';
 import { StoneSelect } from '../ui/StoneSelect';
@@ -11,6 +11,7 @@ import type { BulletinAnalysis } from '../../types';
 interface BulletinUploaderProps {
   studentId: string;
   onAnalysisComplete?: (analysis: BulletinAnalysis) => void;
+  onStartRevisions?: () => void;
 }
 
 // Année scolaire en cours (France : sept-juin)
@@ -26,7 +27,7 @@ function getSchoolYearSemesters(): { value: string; label: string }[] {
   ];
 }
 
-export function BulletinUploader({ studentId, onAnalysisComplete }: BulletinUploaderProps) {
+export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisions }: BulletinUploaderProps) {
   const [semester, setSemester] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -81,26 +82,44 @@ export function BulletinUploader({ studentId, onAnalysisComplete }: BulletinUplo
         body = { fileUrl, fileType, studentId };
       }
 
-      // Rafraîchir la session puis récupérer le token
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session?.access_token) {
+      /*
+      // Rafraîchir la session puis récupérer le token (CAUSES HANG)
+      // const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+      */
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+
+      if (!session?.access_token) {
         throw new Error('Session expirée. Reconnecte-toi.');
       }
 
-      const { data: analysisResult, error: analysisError } = await supabase.functions.invoke(
-        'analyze-bulletin',
-        {
-          body,
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      console.log('[BulletinUploader] Calling Edge Function via direct fetch...');
 
-      if (analysisError) {
-        const msg = (analysisError as { error?: string }).error ?? analysisError.message;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const functionUrl = `${supabaseUrl}/functions/v1/analyze-bulletin`;
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body)
+      });
+
+      let analysisResult;
+      try {
+        analysisResult = await response.json();
+      } catch (e) {
+        throw new Error("Réponse invalide du serveur d'analyse");
+      }
+
+      if (!response.ok) {
+        const msg = analysisResult?.error || analysisResult?.message || "Erreur lors de l'analyse";
         throw new Error(msg);
       }
+
       if (!analysisResult || analysisResult.error) {
         throw new Error(analysisResult?.error || 'Échec de l\'analyse');
       }
@@ -186,14 +205,13 @@ export function BulletinUploader({ studentId, onAnalysisComplete }: BulletinUplo
       {!analysis && (
         <div
           {...getRootProps()}
-          className={`p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
-            isDragActive
-              ? 'border-amber-400 bg-amber-500/10'
-              : 'border-amber-500/30 hover:border-amber-400/50 hover:bg-amber-500/5'
-          }`}
+          className={`p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${isDragActive
+            ? 'border-amber-400 bg-amber-500/10'
+            : 'border-amber-500/30 hover:border-amber-400/50 hover:bg-amber-500/5'
+            }`}
         >
           <input {...getInputProps()} />
-          
+
           <div className="text-center">
             {isUploading ? (
               <div className="flex flex-col items-center">
@@ -285,12 +303,11 @@ export function BulletinUploader({ studentId, onAnalysisComplete }: BulletinUplo
               Analyser un autre bulletin
             </button>
             <button
-              onClick={() => {
-                // Navigate to learning interface
-              }}
-              className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 transition-all"
+              onClick={() => onStartRevisions?.()}
+              className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2"
             >
-              Commencer les révisions
+              <Calendar className="w-5 h-5" />
+              Proposer un planning de révisions
             </button>
           </div>
         </div>

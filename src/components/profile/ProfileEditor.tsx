@@ -9,6 +9,7 @@ import { User, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { StoneSelect } from '../ui/StoneSelect';
+import { toast } from 'sonner';
 import type { Classe } from '../../types';
 
 const CLASSES: Classe[] = ['6ème', '5ème', '4ème', '3ème'];
@@ -50,7 +51,7 @@ export function ProfileEditor() {
         .eq('id', user.id);
       await initialize();
       setSaved(true);
-    } catch (_) {}
+    } catch (_) { }
     setIsSaving(false);
   };
 
@@ -66,22 +67,108 @@ export function ProfileEditor() {
       return;
     }
     setPendingPassword({ new: newPassword, confirm: confirmPassword });
-    setShowPasswordConfirm(true);
+
+    // Temporarily bypass ConfimDialog to avoid UI freeze
+    if (window.confirm("Voulez-vous vraiment changer le mot de passe ? \n(Cette action est irréversible et nécessitera le nouveau mot de passe à la prochaine connexion.)")) {
+      handleConfirmPasswordChange(newPassword);
+    }
+    // setShowPasswordConfirm(true);
   };
 
-  const handleConfirmPasswordChange = async () => {
+  const handleConfirmPasswordChange = async (targetPassword?: string) => {
     setPasswordError(null);
     setPasswordSuccess(false);
     setIsChangingPassword(true);
+
+    // Use argument if provided (sync), otherwise pending (async state from previous render?)
+    const passwordToUse = targetPassword || pendingPassword.new;
+
     try {
-      const { error } = await supabase.auth.updateUser({ password: pendingPassword.new });
-      if (error) throw error;
+      console.log('[DEBUG] ConfirmDialog triggered. Starting handleConfirmPasswordChange...');
+
+      // 1. Verify session exists before request
+      console.log('[DEBUG] Checking session...');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('[DEBUG] Session error:', sessionError);
+        throw sessionError;
+      }
+      if (!sessionData.session) {
+        console.error('[DEBUG] No active session');
+        throw new Error("Session expirée. Veuillez vous reconnecter.");
+      }
+      console.log('[DEBUG] Session active for user:', sessionData.session.user.id);
+
+      /*
+      // 2. Connectivity Test (Metadata update)
+      console.log('[DEBUG] Testing connectivity (metadata update)...');
+      try {
+        const { error: testError } = await supabase.auth.updateUser({
+          data: { last_check: new Date().toISOString() }
+        });
+        if (testError) {
+          console.error('[DEBUG] Connectivity test FAILED:', testError);
+        } else {
+          console.log('[DEBUG] Connectivity test PASSED.');
+        }
+      } catch (e) {
+        console.error('[DEBUG] Connectivity test EXCEPTION:', e);
+      }
+      */
+
+      // 3. Direct API Call (Bypass supabase-js client)
+      console.log('[DEBUG] Trying direct fetch to bypass client hang...');
+
+      const session = sessionData.session;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Configuration Supabase manquante (URL/KEY)");
+      }
+
+      console.log('[DEBUG] Sending direct PUT to /auth/v1/user ...');
+
+      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({ password: passwordToUse })
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        console.error('[DEBUG] Direct fetch error:', responseData);
+        throw new Error(responseData.msg || responseData.error_description || responseData.message || "Erreur lors de la mise à jour");
+      }
+
+      console.log('[DEBUG] Direct fetch SUCCESS:', responseData);
+
+      /*
+      // Update local session if needed? usually session refreshes automatically.
+      // SKIP refresh because client might hang!
+      // const { data: refreshedSession } = await supabase.auth.refreshSession();
+      // console.log('[DEBUG] Session refreshed:', refreshedSession);
+      */
+
       setNewPassword('');
       setConfirmPassword('');
       setPasswordSuccess(true);
+      toast.success("Mot de passe modifié avec succès ! (Via Direct API)");
     } catch (err) {
-      setPasswordError((err as Error).message);
+      console.error('[DEBUG] Password change failed (catch block):', err);
+      const msg = (err as Error).message;
+      setPasswordError(msg);
+      toast.error(`Erreur: ${msg}`);
+      // RETHROW so ConfirmDialog knows it failed and stays open
+      throw err;
     } finally {
+      console.log('[DEBUG] handleConfirmPasswordChange finally block executing.');
       setIsChangingPassword(false);
     }
   };

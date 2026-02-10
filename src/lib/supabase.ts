@@ -5,16 +5,9 @@ import type { Artifact } from '../types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Désactiver le lock Navigator pour éviter "The operation was aborted" (problème connu avec navigator.locks)
-const lockNoOp = async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn();
-
 // Types Database conservés dans src/types/database.ts pour référence future
 // Régénérer avec: npx supabase gen types typescript --project-id <ID> > src/types/database.ts
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    lock: lockNoOp,
-  },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Trouver un parent par email
 export const findParentByEmail = async (email: string) => {
@@ -321,16 +314,16 @@ export const getGamification = async (studentId: string) => {
 export const addXP = async (studentId: string, xpAmount: number) => {
   const { data: current } = await getGamification(studentId);
   if (!current) return { error: new Error('Gamification not found') };
-  
+
   const newXP = current.xp + xpAmount;
   const newRank = calculateRank(newXP);
-  
+
   const { data, error } = await supabase
     .from('gamification')
-    .update({ 
-      xp: newXP, 
+    .update({
+      xp: newXP,
       rank: newRank,
-      updated_at: new Date().toISOString() 
+      updated_at: new Date().toISOString()
     })
     .eq('student_id', studentId);
   return { data, error };
@@ -339,14 +332,14 @@ export const addXP = async (studentId: string, xpAmount: number) => {
 export const addArtifact = async (studentId: string, artifact: Artifact) => {
   const { data: current } = await getGamification(studentId);
   if (!current) return { error: new Error('Gamification not found') };
-  
+
   const artifacts = [...current.artifacts_collected, artifact];
-  
+
   const { data, error } = await supabase
     .from('gamification')
-    .update({ 
+    .update({
       artifacts_collected: artifacts,
-      updated_at: new Date().toISOString() 
+      updated_at: new Date().toISOString()
     })
     .eq('student_id', studentId);
   return { data, error };
@@ -355,9 +348,9 @@ export const addArtifact = async (studentId: string, artifact: Artifact) => {
 export const evolveTemple = async (studentId: string, stage: number) => {
   const { data, error } = await supabase
     .from('gamification')
-    .update({ 
+    .update({
       temple_evolution_stage: stage,
-      updated_at: new Date().toISOString() 
+      updated_at: new Date().toISOString()
     })
     .eq('student_id', studentId);
   return { data, error };
@@ -387,9 +380,9 @@ export const endSession = async (sessionId: string, xpEarned: number, artifacts:
     .select('start_at')
     .eq('id', sessionId)
     .single();
-  
+
   const duration = session ? Math.round((new Date(endAt).getTime() - new Date(session.start_at).getTime()) / 60000) : 0;
-  
+
   const { data, error } = await supabase
     .from('sessions')
     .update({

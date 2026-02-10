@@ -58,7 +58,7 @@ export function StoneSelect({
   required = false,
 }: StoneSelectProps) {
   return (
-    <SelectPrimitive.Root value={value || undefined} onValueChange={onValueChange} required={required} disabled={disabled}>
+    <SelectPrimitive.Root value={value} onValueChange={onValueChange} required={required} disabled={disabled}>
       <SelectPrimitive.Trigger
         className={cn(
           stoneTrigger,

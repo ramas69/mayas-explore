@@ -12,12 +12,14 @@ import { RewardModal } from '../components/rewards/RewardModal';
 import { Compass, Map, MessageSquare, Trophy, FileText, Menu, X, Calendar, User, BookOpen, LogOut } from 'lucide-react';
 import { ProfileEditor } from '../components/profile/ProfileEditor';
 import { ProgrammePage } from '../components/programme/ProgrammePage';
+import { StoneSelect } from '../components/ui/StoneSelect';
 
 // Lazy load heavy components
 const JungleMap = lazy(() => import('../components/map/JungleMap').then(module => ({ default: module.JungleMap })));
 const BulletinViewer = lazy(() => import('../components/bulletin/BulletinViewer').then(module => ({ default: module.BulletinViewer })));
 const BulletinUploader = lazy(() => import('../components/bulletin/BulletinUploader').then(module => ({ default: module.BulletinUploader })));
 const PlanningViewer = lazy(() => import('../components/planning/PlanningViewer').then(module => ({ default: module.PlanningViewer })));
+const PlanningUploader = lazy(() => import('../components/planning/PlanningUploader').then(module => ({ default: module.PlanningUploader })));
 const TempleViewer = lazy(() => import('../components/temple/TempleViewer').then(module => ({ default: module.TempleViewer })));
 const ExcalidrawSandbox = lazy(() => import('../components/sandbox/ExcalidrawSandbox').then(module => ({ default: module.ExcalidrawSandbox })));
 
@@ -47,7 +49,7 @@ export function StudentApp() {
   const [canvasInitialData, setCanvasInitialData] = useState<{ elements: unknown[]; appState?: Record<string, unknown> } | null>(null);
   const [canvasForSessionId, setCanvasForSessionId] = useState<string | null>(null);
   const [bulletinRefresh, setBulletinRefresh] = useState(0);
-  const [planningRefresh] = useState(0);
+  const [planningRefresh, setPlanningRefresh] = useState(0);
   const [, setStudentZone] = useState<SchoolZone>('C');
   const [planningData, setPlanningData] = useState<{ city_zone?: SchoolZone; weekly_slots?: { file_url?: string } } | null>(null);
 
@@ -71,6 +73,21 @@ export function StudentApp() {
         }
       });
   }, [user?.id, planningRefresh]);
+
+  const handleZoneChange = async (zone: SchoolZone) => {
+    setStudentZone(zone);
+    if (!user?.id) return;
+
+    // Persist change
+    if (planningData) {
+      await supabase.from('planning').update({ city_zone: zone }).eq('student_id', user.id);
+    } else {
+      // Create minimal planning record if none exists
+      await supabase.from('planning').insert({ student_id: user.id, city_zone: zone });
+    }
+
+    setPlanningRefresh(p => p + 1);
+  };
 
   const resetSandbox = useSandboxStore((s) => s.resetSandbox);
 
@@ -383,8 +400,13 @@ export function StudentApp() {
                 <BulletinUploader
                   studentId={user?.id || ''}
                   onAnalysisComplete={() => setBulletinRefresh((x) => x + 1)}
+                  onStartRevisions={() => navigate('/app/planning')}
                 />
-                <BulletinViewer studentId={user?.id || ''} refreshTrigger={bulletinRefresh} />
+                <BulletinViewer
+                  studentId={user?.id || ''}
+                  refreshTrigger={bulletinRefresh}
+                  onGeneratePlanning={() => navigate('/app/planning')}
+                />
               </Suspense>
             </div>
           )}
@@ -395,7 +417,40 @@ export function StudentApp() {
                 Mon planning
               </h2>
               <Suspense fallback={<div className="text-amber-200">Chargement du planning...</div>}>
-                <PlanningViewer studentId={user?.id || ''} />
+                <div className="space-y-8">
+                  <div className="stone-card p-6 rounded-2xl bg-amber-950/20 border border-amber-500/20">
+                    <h3 className="text-lg font-bold text-amber-100 mb-4 flex items-center gap-2">
+                      Créer mon planning de révisions
+                    </h3>
+                    <div className="mb-6 max-w-xs">
+                      <label className="block text-amber-100/80 text-sm mb-2">Ma zone scolaire</label>
+                      <StoneSelect
+                        value={(planningData?.city_zone as SchoolZone) || 'C'}
+                        onValueChange={(val) => handleZoneChange(val as SchoolZone)}
+                        options={[
+                          { value: 'A', label: 'Zone A (Lyon, Bordeaux...)' },
+                          { value: 'B', label: 'Zone B (Marseille, Lille...)' },
+                          { value: 'C', label: 'Zone C (Paris, Toulouse...)' },
+                        ]}
+                        placeholder="Choisir une zone"
+                      />
+                    </div>
+
+                    <p className="text-sm text-amber-100/70 mb-4">
+                      Upload ton emploi du temps scolaire (PDF/Image). L'IA va l'analyser et y insérer intelligemment tes séances de révision basées sur ton bulletin.
+                    </p>
+                    <PlanningUploader
+                      studentId={user?.id || ''}
+                      cityZone={(planningData?.city_zone as SchoolZone) || 'C'}
+                      onUploadComplete={() => {
+                        setPlanningRefresh(p => p + 1);
+                        navigate('/app/planning');
+                      }}
+                    />
+                  </div>
+
+                  <PlanningViewer studentId={user?.id || ''} refreshTrigger={planningRefresh} />
+                </div>
               </Suspense>
             </div>
           )}

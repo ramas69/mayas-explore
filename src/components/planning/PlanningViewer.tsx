@@ -64,17 +64,40 @@ export function PlanningViewer({ studentId, refreshTrigger, canEdit, onDeleted, 
 
   const loadPlanning = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('planning')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    try {
+      console.log('[PlanningViewer] Loading planning via direct fetch...');
 
-    if (!error && data) setPlanning(data as PlanningData);
-    else setPlanning(null);
-    setIsLoading(false);
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) throw new Error("No session");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // REST API call: GET /planning?student_id=eq.ID&order=updated_at.desc&limit=1
+      const url = `${supabaseUrl}/rest/v1/planning?student_id=eq.${studentId}&order=updated_at.desc&limit=1&select=*`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseKey
+        }
+      });
+
+      if (!response.ok) throw new Error("Fetch failed");
+
+      const data = await response.json();
+      const planningData = data?.[0] || null;
+
+      setPlanning(planningData);
+    } catch (err) {
+      console.error('[PlanningViewer] Load failed:', err);
+      // Fallback to null (show empty state)
+      setPlanning(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isLoading) {
