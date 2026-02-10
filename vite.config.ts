@@ -25,21 +25,19 @@ export default defineConfig({
               return 'react-vendor';
             }
             // Large libraries that benefit from separate chunks
-            if (id.includes('@excalidraw')) {
-              return 'excalidraw';
-            }
+            // Note: Excalidraw removed from manual chunks due to circular dependency issues
             if (id.includes('three') || id.includes('@react-three')) {
               return 'three';
             }
             if (id.includes('pdfjs-dist')) {
               return 'pdf';
             }
-            // Everything else in one vendor chunk
+            // Everything else (including Excalidraw) in one vendor chunk to avoid circular deps
             return 'vendor';
           }
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
   },
 });
