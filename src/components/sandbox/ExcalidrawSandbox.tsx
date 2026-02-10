@@ -39,17 +39,35 @@ export function ExcalidrawSandbox({
     return () => clearTimeout(timer);
   }, [excalidrawAPI, initialData]);
 
+  const cleanUrl = (url: string) => {
+    return url.replace(/\[\d+\]/g, '').replace(/%5B\d+%5D/g, '').trim();
+  };
+
   useEffect(() => {
     if (!imageToLoad || !excalidrawAPI) {
       return;
     }
-    console.log('[ExcalidrawSandbox] Loading image:', imageToLoad);
-    const url = imageToLoad;
+
+    // 1. Nettoyage de l'URL (suppression des [1], [2], %5B1%5D...)
+    const initialUrl = imageToLoad;
+    const url = cleanUrl(initialUrl);
+    console.log('[ExcalidrawSandbox] Loading image:', { initial: initialUrl, cleaned: url });
+
+    // 2. Validation Extension (simple check)
+    if (!url.match(/\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i)) {
+      console.warn('[ExcalidrawSandbox] Extension image suspecte:', url);
+      // On continue quand même au cas où c'est une image sans extension explicite
+    }
+
     clearImageToLoad();
     (async () => {
       try {
-        console.log('[ExcalidrawSandbox] Fetching...', url);
-        const res = await fetch(url);
+        console.log('[ExcalidrawSandbox] Fetching via proxy...', url);
+        // Use OUR OWN proxy in Edge Function to bypass CORS safely
+        const bucketUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
+        const proxyUrl = `${bucketUrl}/functions/v1/chat?image_url=${encodeURIComponent(url)}`;
+
+        const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
         const blob = await res.blob();
         const mimeType = blob.type || 'image/png';
@@ -61,6 +79,27 @@ export function ExcalidrawSandbox({
 
         const fileId = `img-${Date.now()}` as const;
         console.log('[ExcalidrawSandbox] File prepared:', { fileId, mimeType, dataUrlLen: dataURL.length });
+
+        // Calculate aspect ratio to avoid distortion
+        const imgObj = new Image();
+        imgObj.src = dataURL;
+        await new Promise((resolve) => {
+          imgObj.onload = resolve;
+          imgObj.onerror = resolve; // proceed anyway
+        });
+
+        const naturalWidth = imgObj.naturalWidth || 400;
+        const naturalHeight = imgObj.naturalHeight || 300;
+        const aspect = naturalWidth / naturalHeight;
+
+        // Fit within 400x400 box while maintaining aspect ratio
+        let width = 400;
+        let height = 400;
+        if (aspect > 1) {
+          height = width / aspect;
+        } else {
+          width = height * aspect;
+        }
 
         if (excalidrawAPI.addFiles) {
           console.log('[ExcalidrawSandbox] Calling addFiles...');
@@ -77,10 +116,10 @@ export function ExcalidrawSandbox({
           fileId,
           x: 80,
           y: 60,
-          width: 400,
-          height: 300,
-          naturalWidth: 400,
-          naturalHeight: 300,
+          width: width,
+          height: height,
+          naturalWidth: naturalWidth, // Important for Excalidraw to know original size
+          naturalHeight: naturalHeight,
           angle: 0,
           locked: true,
           status: 'saved' as const,

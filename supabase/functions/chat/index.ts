@@ -41,40 +41,219 @@ async function fetchWithTimeout(
   }
 }
 
-/** Récupère une URL d'image Wikimedia Commons. L'IA fournit un terme de recherche optimisé (ex: "heart diagram", "lung anatomy"). */
-async function fetchWikimediaImageUrl(topic: string): Promise<string | null> {
-  const query = encodeURIComponent(topic.trim());
-  const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${query}&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json&origin=*`;
+/** 
+ * Recherche une image éducative de haute qualité via Perplexity API.
+ * Le prompt force l'API à identifier une URL unique et pertinente.
+ */
+/** 
+ * Vérifie si une URL existe réellement (HEAD request) avec un User-Agent de navigateur.
+ */
+async function checkUrlValidity(url: string): Promise<boolean> {
+  // On ne fait PAS confiance aveuglément pour éviter les hallucinations de chemins (404)
   try {
     const res = await fetchWithTimeout(url, {
-      timeoutMs: 10000,
-      headers: { 'User-Agent': 'EdTech-Guardian/1.0 (education-project)' },
+      method: 'HEAD',
+      timeoutMs: 4000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+      }
     });
-    const json = await res.json();
-    const pages = json?.query?.pages;
-    if (!pages || typeof pages !== 'object') {
-      console.log('[display_schema] Wikimedia recherche:', topic, '→ aucun résultat');
+    // On accepte 200 OK et les Content-Type images
+    const type = res.headers.get('content-type') || '';
+    return res.ok && (type.startsWith('image') || type.includes('application/octet-stream') || url.match(/\.(jpg|jpeg|png|webp|svg)$/i) !== null);
+  } catch {
+    return false;
+  }
+}
+
+/** 
+ * Tente de convertir une URL SVG Wikimedia en PNG 800px via Special:FilePath.
+ */
+function optimiserUrlWikimedia(url: string): string {
+  if (url.match(/\.svg$/i) && (url.includes('wikimedia.org') || url.includes('wikipedia.org'))) {
+    const filename = url.split('/').pop();
+    if (filename) {
+      // Force le rendu PNG 800px via l'outil spécial de Commons
+      return `https://commons.wikimedia.org/wiki/Special:FilePath/${filename}?width=800`;
+    }
+  }
+  return url;
+}
+
+/** 
+ * Recherche une image via Perplexity en demandant un format Markdown Galerie.
+ * Stratégie : Forcer le modèle à générer des liens d'images explicites trouvés dans sa recherche.
+ */
+async function searchPerplexityImage(topic: string, classe: string | null): Promise<string | null> {
+  const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
+  if (!apiKey) return null;
+
+  const level = classe || 'collège';
+  const prompt = `Create a markdown image gallery with 3 high-quality educational images (diagrams, maps, historical photos, artworks, charts) of "${topic}" (${level} level).
+  Source ONLY from reliable public educational sites (Wikimedia, OpenStax, Flickr Commons, Library of Congress).
+  Format: ![Alt Text](https://exact-url-to-image.jpg)
+  Do not explain. Just the markdown. If you find a page, extract the main image URL.
+  Example: ![Heart](https://upload.wikimedia.org/wikipedia/commons/e/e5/Diagram_heart.png)`;
+
+  try {
+    const res = await fetchWithTimeout('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+      }),
+      timeoutMs: 30000,
+    });
+
+    if (!res.ok) {
+      console.error('[Perplexity] API Error:', res.status, await res.text());
       return null;
     }
 
-    // On cherche la première image valide (jpg, png, webp, svg)
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg'];
-    const candidates = Object.values(pages) as { imageinfo?: { 0?: { url?: string } } }[];
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content || '';
+    console.log('[Perplexity] Response:', content);
 
-    let foundUrl: string | null = null;
-    for (const page of candidates) {
-      const u = page?.imageinfo?.[0]?.url;
-      if (u && validExtensions.some(ext => u.toLowerCase().endsWith(ext))) {
-        foundUrl = u;
-        break;
+    // Extraction des URLs Markdown ![...](URL)
+    const markdownRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+    const matches = [...content.matchAll(markdownRegex)];
+    let candidates = matches.map(m => m[1]);
+
+    // Fallback: Tentative regex raw URL si pas de markdown
+    if (candidates.length === 0) {
+      const rawMatches = content.match(/https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|svg|webp)/gi);
+      if (rawMatches) candidates.push(...rawMatches);
+    }
+
+    // Nettoyage : retirer les [1], [2] de fin d'URL et doublons
+    candidates = candidates.map(url => url.replace(/\[\d+\]$/, ''));
+    candidates = [...new Set(candidates)]; // Dedup
+
+    console.log('[Perplexity] Candidates:', candidates.length);
+
+    // Validation
+    for (let url of candidates) {
+      // Optimisation Wikimedia SVG -> PNG
+      url = optimiserUrlWikimedia(url);
+
+      if (await checkUrlValidity(url)) {
+        console.log('[Perplexity] Valid Image URL:', url);
+        return url;
+      } else {
+        console.log('[Perplexity] Invalid/Blocked URL:', url);
       }
     }
 
-    console.log('[display_schema] Wikimedia recherche:', topic, '→', foundUrl ? 'OK' : 'aucune URL valide');
-    return foundUrl;
-  } catch (err) {
-    console.log('[display_schema] Wikimedia erreur pour:', topic, err);
+    console.log('[Perplexity] No valid image found.');
     return null;
+
+  } catch (err) {
+    console.error('[Perplexity] Error:', err);
+    return null;
+  }
+}
+
+/** 
+ * Recherche de secours si Perplexity échoue (ce qui arrive souvent pour les URLs directes).
+ * Utilise l'API Wikimedia Commons pour trouver une image fiable.
+ */
+async function fallbackImageSearch(topic: string): Promise<string | null> {
+  const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(topic)}&gsrlimit=3&prop=imageinfo&iiprop=url&format=json&origin=*`;
+  try {
+    console.log('[Fallback] Searching Wikimedia API for:', topic);
+    const res = await fetchWithTimeout(searchUrl, { timeoutMs: 5000 });
+    const json = await res.json();
+    const pages = json?.query?.pages;
+    if (!pages) return null;
+
+    const candidates = Object.values(pages) as { imageinfo?: { 0?: { url?: string } } }[];
+    for (const page of candidates) {
+      const url = page?.imageinfo?.[0]?.url;
+      if (url && (url.endsWith('.jpg') || url.endsWith('.png') || url.endsWith('.svg'))) {
+        return optimiserUrlWikimedia(url);
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error('[Fallback] Error:', e);
+    return null;
+  }
+}
+
+/** 
+ * Orchestrateur Perplexity + Vision.
+ */
+async function searchAndAnalyzeImage(topic: string, classe: string | null, openaiKey: string): Promise<{ url: string | null, analysis: string }> {
+  // 1. Essai Perplexity (IA)
+  let url = await searchPerplexityImage(topic, classe);
+
+  // 2. Fallback si Perplexity échoue (API Directe)
+  if (!url) {
+    console.log('[Note] Perplexity a échoué pas grave, passage au mode secours (API WikimediaDirect).');
+    url = await fallbackImageSearch(topic);
+  }
+
+  if (!url) {
+    return { url: null, analysis: "Le Gardien n'a pas pu visualiser cet artefact (image illisible ou introuvable)." };
+  }
+
+  const analysis = await analyzeImageWithVision(url, openaiKey, classe);
+  return { url, analysis };
+}
+
+/** 
+ * Analyse une image via GPT-4o Vision pour identifier un détail pédagogique.
+ * Renvoie une description qui servira de base à la question socratique.
+ */
+async function analyzeImageWithVision(imageUrl: string, openaiKey: string, classe: string | null): Promise<string> {
+  const level = classe || 'collège';
+  const prompt = `Tu es le Gardien du savoir. Analyse les détails visuels de ce document (carte, oeuvre, schéma, photo) pour un élève de niveau ${level}. Identifie un élément spécifique (une couleur, une flèche, une légende, un personnage, un lieu, une date, un symbole) que l'élève peut observer. Décris-le brièvement pour que je puisse poser une question dessus.`;
+
+  try {
+    const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+            ],
+          },
+        ],
+        max_tokens: 150,
+      }),
+      timeoutMs: 25000,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Vision] API Error:', res.status, errText);
+      // Fallback: Si erreur Vision, on renvoie une phrase générique pour ne pas bloquer
+      return "Je vois l'image mais l'analyse détaillée est momentanément indisponible. Que remarques-tu ?";
+    }
+
+    const json = await res.json();
+    if (!json.choices?.[0]?.message?.content) {
+      console.error('[Vision] Empty response:', JSON.stringify(json));
+      return "Analyse visuelle impossible (réponse vide).";
+    }
+    return json.choices[0].message.content;
+  } catch (err) {
+    console.error('[Vision] Erreur Exception:', err);
+    return "Je n'ai pas pu analyser l'image en détail, mais observons-la ensemble.";
   }
 }
 
@@ -211,6 +390,42 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // --- PROXY IMAGE POUR CONTOURNER CORS ---
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const imageUrl = url.searchParams.get('image_url');
+    if (imageUrl) {
+      try {
+        console.log('[Proxy] Fetching image:', imageUrl);
+        // Important: Add User-Agent to avoid blocking by Wikimedia/others (Cloudflare often blocks Deno without UA)
+        const imgRes = await fetch(imageUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          }
+        });
+
+        if (!imgRes.ok) {
+          console.error('[Proxy] Upstream Error:', imgRes.status, imgRes.statusText);
+          return new Response(`Image Fetch Error: ${imgRes.status} ${imgRes.statusText}`, { status: imgRes.status, headers: corsHeaders });
+        }
+
+        const blob = await imgRes.blob();
+        return new Response(blob, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': imgRes.headers.get('Content-Type') || 'application/octet-stream',
+            'Cache-Control': 'public, max-age=3600'
+          }
+        });
+      } catch (e) {
+        console.error('[Proxy] Error:', e);
+        return new Response('Proxy Error', { status: 500, headers: corsHeaders });
+      }
+    }
+  }
+  // ----------------------------------------
+
   try {
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiKey) {
@@ -311,7 +526,7 @@ Deno.serve(async (req) => {
             properties: {
               topic: {
                 type: 'string',
-                description: "Terme de recherche pour Wikimedia Commons : anglais, format 'X diagram' ou 'X anatomy'. Adapte au concept demandé (toute matière) et au NIVEAU SCOLAIRE. Précise 'human' pour l'anatomie.",
+                description: "Recherche une image scientifique via Perplexity et l'analyse avec Vision. Terme de recherche : anglais. Adapte au concept demandé et au NIVEAU SCOLAIRE. Précise 'human' pour l'anatomie.",
               },
             },
           },
@@ -366,13 +581,21 @@ OUTILS DISPONIBLES :
 
 3. update_sandbox : Annotations sur IMAGE (display_schema) uniquement. Autorise UNIQUEMENT : flèches (arrow, strokeWidth:2, roughness:0) et labels texte. Interdit : cercles, ellipses, rectangles, diamants, freedraw. L'image (display_schema) est centrée x:80 y:60 400x300. Une flèche fine rouge + un label à côté.
 
-4. display_schema : Affiche une image (Wikimedia) dans le Grimoire. Extrais le sujet, choisis un terme anglais optimisé (format "X diagram" ou "X anatomy"), passe-le en topic — jamais d'URL en dur. Multi-matières. L'image est la seule source visuelle.
+4. display_schema : Recherche une image éducative (via Perplexity) et l'analyse visuellement. Extrais le sujet, choisis un terme anglais optimisé. L'outil te renverra une ANALYSE VISUELLE que tu devras utiliser pour ta réponse socratique.
 
 5. complete_mission : Appelle UNIQUEMENT quand l'élève a validé sa compréhension (réponses correctes OU a bien accompli la tâche visuelle demandée). Avant d'appeler, vérifie dans sandboxElements si tu avais demandé une action visuelle (ex: "entoure", "relie") que l'élève a bien exécutée.
 
 6. suggest_guardian : Appelle UNIQUEMENT si la question concerne une matière DIFFÉRENTE de ta matière actuelle. Si la question est DANS ta matière (ex: SVT + poumons/cœur/cellules ; Maths + équations ; Français + conjugaison) → NE PAS appeler suggest_guardian, réponds normalement.
 
-⚠️ HORS-SUJET : suggest_guardian SEULEMENT si la question est sur une matière AUTRE que la tienne. Vérifie le CONTEXTE ACTUEL (Matière) avant d'appeler.`;
+⚠️ HORS-SUJET : suggest_guardian SEULEMENT si la question est sur une matière AUTRE que la tienne. Vérifie le CONTEXTE ACTUEL (Matière) avant d'appeler.
+
+## PROTOCOLE DE GÉNÉRATION SVG
+- **Usage :** Obligatoire pour Maths, Physique, Chimie et schémas simples de SVT.
+- **Format :** Tu dois générer un bloc de code SVG valide entre des balises spécifiques : [SVG_START] <svg viewBox="0 0 400 400"> ... </svg> [SVG_END].
+- **Style :** - viewBox="0 0 400 400" pour la cohérence.
+  - Fond blanc ou transparent.
+  - Couleurs vives pour les éléments clés (ex: #E74C3C pour le sang oxygéné, #3498DB pour l'azote).
+  - **Labels :** Utilise la balise <text> pour nommer CHAQUE partie du schéma. C'est crucial pour l'analyse visuelle.`;
 
     const sandboxContext =
       Array.isArray(sandboxElements) && sandboxElements.length > 0
@@ -523,15 +746,24 @@ OUTILS DISPONIBLES :
               } as { role: string; content: string });
             }
           } else if (name === 'display_schema' && args.topic) {
-            console.log('[display_schema] Appel display_schema topic:', args.topic);
-            const imgUrl = await fetchWikimediaImageUrl(args.topic);
-            if (imgUrl) displaySchemaUrl = imgUrl;
-            console.log('[display_schema] Résultat:', { topic: args.topic, found: !!imgUrl, displaySchemaUrl: !!displaySchemaUrl });
+            console.log('[display_schema] Topic:', args.topic);
+            const { url, analysis } = await searchAndAnalyzeImage(args.topic, classe, openaiKey);
+
+            let toolContent = '';
+            if (url) {
+              displaySchemaUrl = url;
+              console.log('[display_schema] Image trouvée:', url);
+              console.log('[display_schema] Analyse Vision:', analysis.slice(0, 50) + '...');
+
+              toolContent = `IMAGE AFFICHÉE : ${url}\n\nANALYSE VISUELLE (Vision API) :\n"${analysis}"\n\nCONSIGNE GARDIEN : Utilise cette analyse pour poser une question socratique précise sur un détail visuel (couleur, forme, texte) de ce schéma. Incarne le style Tomb Raider/Mystique.`;
+            } else {
+              console.log('[display_schema] Aucune image trouvée.');
+              toolContent = `Impossible de trouver une image fiable pour "${args.topic}". Décris le concept avec des mots mystérieux et demande à l'élève de l'imaginer.`;
+            }
+
             messages.push({
               role: 'tool',
-              content: imgUrl
-                ? `Image affichée dans le Grimoire. N'envoie AUCUN élément update_sandbox par défaut — l'image est la seule source visuelle. Si tu veux désigner un élément, utilise UNE flèche fine (strokeWidth:2, roughness:0) + un label texte uniquement.`
-                : `Aucune image trouvée pour "${args.topic}". Utilise update_sandbox avec des flèches et du texte uniquement.`,
+              content: toolContent,
               tool_call_id: tc.id,
             } as { role: string; content: string });
           } else if (name === 'update_sandbox') {
