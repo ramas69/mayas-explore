@@ -41,34 +41,58 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
       setError('Choisis d\'abord le semestre concerné.');
       return;
     }
-    const file = acceptedFiles[0];
-    if (!file) return;
+    const files = acceptedFiles;
+    if (files.length === 0) return;
 
     setIsUploading(true);
     setError(null);
 
     try {
-      const fileExt = file.name.split('.').pop();
       const timestamp = Date.now();
       const basePath = `${studentId}/${timestamp}`;
-      const fileType = file.type.startsWith('image/') ? 'image' : 'pdf';
+      let body: { fileUrl?: string; fileType: string; studentId: string; pageImageUrls?: string[] };
 
-      // Upload fichier original à Supabase Storage
-      const fileName = `${basePath}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('bulletins')
-        .upload(fileName, file);
+      // Cas 1 : Plusieurs images (photos des pages du bulletin)
+      if (files.length > 1 || (files.length === 1 && files[0].type.startsWith('image/'))) {
+        const uploadedUrls: string[] = [];
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file.type.startsWith('image/')) continue; // Ignore non-images in multi-mode for now
 
-      if (uploadError) throw uploadError;
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${basePath}_page_${i}.${fileExt}`;
 
-      const fileUrl = supabase.storage.from('bulletins').getPublicUrl(fileName).data.publicUrl;
+          const { error: uploadError } = await supabase.storage
+            .from('bulletins')
+            .upload(fileName, file);
 
-      setIsUploading(false);
-      setIsAnalyzing(true);
+          if (uploadError) throw uploadError;
+          const url = supabase.storage.from('bulletins').getPublicUrl(fileName).data.publicUrl;
+          uploadedUrls.push(url);
+        }
 
-      // Pour PDF : convertir chaque page en image et uploader (chunks)
-      let body: { fileUrl: string; fileType: string; studentId: string; pageImageUrls?: string[] };
-      if (fileType === 'pdf') {
+        if (uploadedUrls.length === 0) throw new Error("Aucune image valide trouvée.");
+
+        // On envoie les URLs comme "pages" à l'IA
+        body = {
+          fileType: 'pdf_pages', // Hack: reuse pdf_pages logic which handles array of URLs
+          studentId,
+          pageImageUrls: uploadedUrls,
+          fileUrl: uploadedUrls[0] // Main URL (first page) for display
+        };
+      }
+      // Cas 2 : Un seul PDF
+      else if (files.length === 1 && files[0].type === 'application/pdf') {
+        const file = files[0];
+        const fileName = `${basePath}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from('bulletins')
+          .upload(fileName, file);
+        if (uploadError) throw uploadError;
+
+        const fileUrl = supabase.storage.from('bulletins').getPublicUrl(fileName).data.publicUrl;
+
+        // Conversion PDF -> Images pour l'IA (Vision)
         const pageImageUrls = await pdfToImageUrls(file, async (blob, pageIndex) => {
           const pageFileName = `${basePath}_page_${pageIndex}.jpg`;
           const { error: pageErr } = await supabase.storage
@@ -77,9 +101,10 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
           if (pageErr) throw pageErr;
           return supabase.storage.from('bulletins').getPublicUrl(pageFileName).data.publicUrl;
         });
-        body = { fileUrl, fileType: 'pdf_pages' as const, studentId, pageImageUrls };
+
+        body = { fileUrl, fileType: 'pdf_pages', studentId, pageImageUrls };
       } else {
-        body = { fileUrl, fileType, studentId };
+        throw new Error("Format non supporté. Utilise PDF ou Images.");
       }
 
       /*
@@ -124,6 +149,11 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
         throw new Error(analysisResult?.error || 'Échec de l\'analyse');
       }
 
+      // Variables pour l'enregistrement en BDD
+      const finalFileUrl = body.fileUrl || '';
+      const finalFileType = body.fileType === 'pdf_pages' && files.length === 1 && files[0].type === 'application/pdf' ? 'pdf' : 'image';
+      const finalFileName = files.length === 1 ? files[0].name : `bulletin_${new Date().toISOString()}.jpg`;
+
       // Upsert : un bulletin par semestre — met à jour si existe, sinon insert (garde les anciennes données)
       const { data: existing } = await supabase
         .from('bulletin_analyses')
@@ -137,9 +167,9 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
         const { data: updated, error: updateError } = await supabase
           .from('bulletin_analyses')
           .update({
-            file_url: fileUrl,
-            file_name: file.name,
-            file_type: fileType,
+            file_url: finalFileUrl,
+            file_name: finalFileName,
+            file_type: finalFileType,
             extracted_data: analysisResult,
           })
           .eq('id', existing.id)
@@ -153,9 +183,9 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
           .insert({
             student_id: studentId,
             semester,
-            file_url: fileUrl,
-            file_name: file.name,
-            file_type: fileType,
+            file_url: finalFileUrl,
+            file_name: finalFileName,
+            file_type: finalFileType,
             extracted_data: analysisResult,
           })
           .select()
@@ -181,8 +211,8 @@ export function BulletinUploader({ studentId, onAnalysisComplete, onStartRevisio
       'image/*': ['.png', '.jpg', '.jpeg'],
       'application/pdf': ['.pdf'],
     },
-    maxFiles: 1,
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxFiles: 5,
+    maxSize: 10 * 1024 * 1024,
   });
 
   return (

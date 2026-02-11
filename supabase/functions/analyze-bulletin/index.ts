@@ -31,20 +31,20 @@ interface BulletinSubject extends BulletinSubjectRaw {
 }
 
 // Note sur 20 déduite du status (moyenne des status pour arriver à 20)
-const STATUS_TO_GRADE: Record<string, number> = {
+const STATUS_TO_GRADE = {
   ok: 18,
   reviser: 14,
   surveiller: 10,
   danger: 6,
-};
+} as const;
 
 // Jauge 0-5 déduite du status (pour affichage)
-const STATUS_TO_GAUGE: Record<string, number> = {
+const STATUS_TO_GAUGE = {
   ok: 5,
   reviser: 4,
   surveiller: 2,
   danger: 1,
-};
+} as const;
 
 interface BulletinExtracted {
   subjects: BulletinSubject[];
@@ -192,6 +192,8 @@ Règles :
         model: 'gpt-4o',
         messages,
         max_tokens: 2000,
+        temperature: 0,
+        seed: 42,
         response_format: { type: 'json_object' },
       }),
     });

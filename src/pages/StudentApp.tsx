@@ -121,41 +121,61 @@ export function StudentApp() {
 
   const handleSelectGuardian = async (subject: Subject) => {
     console.log('[App] handleSelectGuardian called with:', subject);
-    if (!user?.id) return;
-    setMenuOpen(false);
-    // Basculer vers le chat immédiatement pour un retour visuel
-    navigate('/app/chat');
-    const { data: profile } = await getProfile(user.id);
-    const limit = (profile as { daily_time_limit?: number } | null)?.daily_time_limit ?? 120;
-    const dailyUsed = await calculateDailyUsage(user.id);
-    if (dailyUsed >= limit) {
-      alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
+    if (!user?.id) {
+      console.error('[App] No user ID');
       return;
     }
-    const chapters = getChaptersBySubject(subject);
-    const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0] ?? {
-      id: `guardian-${subject}`,
-      student_id: user.id,
-      subject,
-      chapter_name: subject,
-      source: 'manual' as const,
-      status: 'pas_vu' as const,
-      order_index: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    console.log('[App] Selected chapter:', chapter);
-    const { data: session, error } = await startSession(user.id, subject, chapter.chapter_name);
-    console.log('[App] startSession result:', { session, error });
-    if (error) {
-      console.error('[App] startSession error:', error);
-      alert('Impossible de démarrer la session. Réessaie.');
-      return;
-    }
-    if (session) {
-      console.log('[App] Setting currentSessionId:', session.id);
-      setCurrentSessionId(session.id);
-      setSelectedChapter(chapter);
+
+    try {
+      setMenuOpen(false);
+      // Basculer vers le chat immédiatement pour un retour visuel
+      navigate('/app/chat');
+
+      console.log('[App] Getting profile...');
+      const { data: profile } = await getProfile(user.id);
+      const limit = (profile as { daily_time_limit?: number } | null)?.daily_time_limit ?? 120;
+
+      console.log('[App] Calculating daily usage...');
+      const dailyUsed = await calculateDailyUsage(user.id);
+      console.log('[App] Daily usage:', { dailyUsed, limit });
+
+      if (dailyUsed >= limit) {
+        alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
+        return;
+      }
+
+      const chapters = getChaptersBySubject(subject);
+      const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0] ?? {
+        id: `guardian-${subject}`,
+        student_id: user.id,
+        subject,
+        chapter_name: subject,
+        source: 'manual' as const,
+        status: 'pas_vu' as const,
+        order_index: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log('[App] Selected chapter:', chapter);
+      console.log('[App] Starting session...');
+      const { data: session, error } = await startSession(user.id, subject, chapter.chapter_name);
+      console.log('[App] startSession result:', { session: !!session, error: error?.message });
+
+      if (error) {
+        console.error('[App] startSession error:', error);
+        alert('Impossible de démarrer la session. Réessaie.');
+        return;
+      }
+
+      if (session) {
+        console.log('[App] Setting currentSessionId:', session.id);
+        setCurrentSessionId(session.id);
+        setSelectedChapter(chapter);
+      }
+    } catch (error) {
+      console.error('[App] handleSelectGuardian error:', error);
+      alert('Une erreur est survenue. Recharge la page et réessaie.');
     }
   };
 

@@ -13,6 +13,17 @@ import {
 import type { ChatMessage, Subject } from '../types';
 import { getMentorForSubject } from '../lib/mentorGroups';
 import { findBulletinDataForSubject } from '../lib/subjectMapping';
+import { EVALUATION_INSTRUCTIONS } from '../lib/evaluationPrompt';
+import {
+  saveStudentAnswer,
+  calculateXP,
+  getRecentErrors,
+  getStrengths,
+  scheduleRetry,
+  getErrorCount,
+  getStreak,
+  getStreakBonus,
+} from '../lib/evaluationUtils';
 
 export interface RedirectGuardianData {
   subject: string;
@@ -91,7 +102,7 @@ const BASE_PROMPT = `# PROMPT : LE GARDIEN DU SAVOIR (MODÈLE COLLÈGE)
   
   Le **sang oxygéné** circule effectivement à part dans ce temple vital.
   
-  🔦 Sais-tu quel mécanisme l'empêche de se mélanger ? ✏️"`;
+  🔦 Sais-tu quel mécanisme l'empêche de se mélanger ? ✏️"` + EVALUATION_INSTRUCTIONS;
 
 interface MentorContext extends ChatContext {
   bulletinAlert?: string;
@@ -100,8 +111,34 @@ interface MentorContext extends ChatContext {
   chapterStatus?: 'pas_vu' | 'vu_en_classe' | 'maitrise';
 }
 
-function buildSystemPrompt(context?: MentorContext): string {
+async function buildSystemPrompt(context?: MentorContext, studentId?: string): Promise<string> {
   let prompt = BASE_PROMPT;
+
+  // Récupérer les erreurs récentes et points forts
+  if (studentId) {
+    const { data: recentErrors } = await getRecentErrors(studentId, 5);
+    const { data: strengths } = await getStrengths(studentId);
+
+    if (recentErrors && recentErrors.length > 0) {
+      prompt += `\n\n⚠️ POINTS FAIBLES DÉTECTÉS (repose ces questions) :\n`;
+      recentErrors.forEach(error => {
+        prompt += `- ${error.question_topic} : L'élève a fait ${error.retry_count + 1} erreur(s). `;
+        prompt += `Dernière erreur : "${error.student_answer}". `;
+        if (error.evaluation_details?.reasoning) {
+          prompt += `Raison : ${error.evaluation_details.reasoning}\n`;
+        }
+      });
+      prompt += `\nREPOSE ces questions de manière différente pour vérifier si l'élève a compris.\n`;
+    }
+
+    if (strengths && strengths.length > 0) {
+      prompt += `\n\n✅ POINTS FORTS (l'élève maîtrise) :\n`;
+      strengths.forEach(s => {
+        prompt += `- ${s.topic} : ${s.success_rate}% de réussite (${s.correct_attempts}/${s.total_attempts})\n`;
+      });
+      prompt += `\nTu peux augmenter la difficulté sur ces sujets.\n`;
+    }
+  }
   if (context?.subject || context?.chapterName || context?.curriculumChapters?.length || context?.parentPriorityAlert) {
     prompt += `\n\n--- CONTEXTE ACTUEL (IMPORTANT - adapte tes réponses en conséquence) ---\n`;
     if (context.subject) {
@@ -164,6 +201,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     console.log('[ChatStore] sendMessage start', { content: content.slice(0, 30), sessionId, studentId });
     set({ isTyping: true });
     let fetchTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let safetyTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    // Timeout de sécurité : si après 2 min on n'a toujours pas de réponse, forcer isTyping=false
+    safetyTimeoutId = setTimeout(() => {
+      console.error('[ChatStore] SAFETY TIMEOUT: Forcing isTyping=false after 2 minutes');
+      set({ isTyping: false });
+      get().receiveAIMessage(
+        "⚠️ Le mentor ne répond pas. Vérifie ta connexion et réessaie ! 🏕️",
+        sessionId
+      ).catch(e => console.error('[ChatStore] Safety timeout receiveAIMessage error:', e));
+    }, 120000); // 2 minutes
 
     try {
       const { messages } = get();
@@ -270,7 +318,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         planningSlots,
         parentPriorityAlert,
       };
-      const systemPrompt = buildSystemPrompt(mentorContext);
+      const systemPrompt = await buildSystemPrompt(mentorContext, studentId);
       const studentMemory = await getStudentMemory(studentId);
 
       let sandboxElements: unknown[] = [];
@@ -348,6 +396,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         missionCompleted?: boolean;
         missionReward?: { xp: number; artifactName: string };
         redirectToGuardian?: { subject: string; guardianName: string };
+        evaluation?: {
+          evaluation: 'correct' | 'partial' | 'incorrect';
+          reasoning: string;
+          mistakes?: string[];
+          question_topic?: string;
+          question_difficulty?: 'easy' | 'medium' | 'hard';
+        };
       } | null;
       const contentText = resp?.content ?? '';
       const drawingData = resp?.drawing ?? undefined;
@@ -412,6 +467,68 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         await useGamificationStore.getState().showMissionReward(studentId, artifact, missionReward.xp);
       }
+
+      // Traiter l'évaluation de la réponse
+      if (resp?.evaluation) {
+        console.log('[ChatStore] Évaluation reçue:', resp.evaluation);
+
+        try {
+          const difficulty = resp.evaluation.question_difficulty || 'medium';
+          const retryCount = await getErrorCount(studentId, resp.evaluation.question_topic || '');
+          const xpAwarded = calculateXP(resp.evaluation.evaluation, difficulty, retryCount);
+
+          // Sauvegarder l'évaluation
+          await saveStudentAnswer({
+            student_id: studentId,
+            session_id: sessionId,
+            message_id: savedMessage?.id,
+            question: messages[messages.length - 2]?.content || '', // Question de l'IA
+            question_topic: resp.evaluation.question_topic,
+            question_difficulty: difficulty,
+            student_answer: content,
+            evaluation: resp.evaluation.evaluation,
+            evaluation_details: {
+              reasoning: resp.evaluation.reasoning,
+              mistakes: resp.evaluation.mistakes || [],
+            },
+            xp_awarded: xpAwarded,
+            retry_count: retryCount,
+            mastered: resp.evaluation.evaluation === 'correct' && retryCount > 0,
+          });
+
+          // Ajouter les XP au profil
+          if (xpAwarded > 0) {
+            const { useGamificationStore } = await import('./gamificationStore');
+            await useGamificationStore.getState().earnXP(studentId, xpAwarded);
+            console.log(`[ChatStore] XP ajoutés: +${xpAwarded}`);
+          }
+
+          // Si erreur, programmer une révision
+          if (resp.evaluation.evaluation === 'incorrect') {
+            await scheduleRetry(
+              studentId,
+              resp.evaluation.question_topic || 'Unknown',
+              messages[messages.length - 2]?.content || '',
+              savedMessage?.id || '',
+              retryCount + 1
+            );
+            console.log(`[ChatStore] Révision programmée pour: ${resp.evaluation.question_topic}`);
+          }
+
+          // Vérifier les bonus de série
+          const { data: streak } = await getStreak(studentId);
+          if (streak && resp.evaluation.evaluation === 'correct') {
+            const streakBonus = getStreakBonus(streak.current_streak);
+            if (streakBonus > 0) {
+              const { useGamificationStore } = await import('./gamificationStore');
+              await useGamificationStore.getState().earnXP(studentId, streakBonus);
+              console.log(`[ChatStore] 🔥 Série de ${streak.current_streak}! Bonus: +${streakBonus} XP`);
+            }
+          }
+        } catch (error) {
+          console.error('[ChatStore] Erreur lors du traitement de l\'évaluation:', error);
+        }
+      }
       console.log('[ChatStore] Enregistrement réponse IA', { contentLen: contentText.length, hasRedirect: !!resp?.redirectToGuardian });
       await get().receiveAIMessage(contentText, sessionId, drawingData, {
         missionCompleted,
@@ -443,6 +560,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } finally {
       if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
+      if (safetyTimeoutId) clearTimeout(safetyTimeoutId);
       set({ isTyping: false });
       console.log('[ChatStore] sendMessage finally, isTyping=false');
     }

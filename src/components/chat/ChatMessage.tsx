@@ -9,7 +9,11 @@ interface ChatMessageProps {
   mentorName?: string;
 }
 
-export function ChatMessage({ message, mentorName }: ChatMessageProps) {
+import { memo } from 'react';
+
+// ... imports
+
+export const ChatMessage = memo(function ChatMessage({ message, mentorName }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -77,4 +81,4 @@ export function ChatMessage({ message, mentorName }: ChatMessageProps) {
       </div>
     </div>
   );
-}
+});

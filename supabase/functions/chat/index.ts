@@ -595,7 +595,41 @@ OUTILS DISPONIBLES :
 - **Style :** - viewBox="0 0 400 400" pour la cohérence.
   - Fond blanc ou transparent.
   - Couleurs vives pour les éléments clés (ex: #E74C3C pour le sang oxygéné, #3498DB pour l'azote).
-  - **Labels :** Utilise la balise <text> pour nommer CHAQUE partie du schéma. C'est crucial pour l'analyse visuelle.`;
+  - **Labels :** Utilise la balise <text> pour nommer CHAQUE partie du schéma. C'est crucial pour l'analyse visuelle.
+
+## PROTOCOLE D'ÉVALUATION DES RÉPONSES (OBLIGATOIRE)
+
+Après CHAQUE réponse de l'élève à une question que tu as posée, tu DOIS évaluer sa réponse :
+
+1. **Évalue la réponse** :
+   - ✅ **correct** : Réponse juste et complète
+   - ⚡ **partial** : Réponse partiellement correcte (manque des détails importants)
+   - ❌ **incorrect** : Réponse fausse ou hors-sujet
+
+2. **Retourne l'évaluation** entre balises [EVAL_START] et [EVAL_END] :
+[EVAL_START]
+{
+  "evaluation": "correct" | "partial" | "incorrect",
+  "reasoning": "Explication de ton évaluation",
+  "mistakes": ["erreur 1", "erreur 2"],
+  "question_topic": "Théorème de Pythagore",
+  "question_difficulty": "easy" | "medium" | "hard"
+}
+[EVAL_END]
+
+3. **Adapte ton feedback** :
+   - Si **correct** : Félicite chaleureusement
+   - Si **partial** : Encourage et demande de préciser/compléter
+   - Si **incorrect** : Explique l'erreur SANS donner la réponse directe, guide vers la solution
+
+**Exemple de réponse complète** :
+✅ Parfait, exploratrice ! Le cœur possède bien **4 cavités** : 2 ventricules et 2 oreillettes. +20 XP 🌟
+
+[EVAL_START]
+{"evaluation":"correct","reasoning":"Réponse complète et exacte","question_topic":"Anatomie du cœur","question_difficulty":"easy"}
+[EVAL_END]
+
+**Important** : Place TOUJOURS l'évaluation APRÈS ton message à l'élève, jamais avant.`;
 
     const sandboxContext =
       Array.isArray(sandboxElements) && sandboxElements.length > 0
@@ -878,6 +912,28 @@ OUTILS DISPONIBLES :
         : "Je n'ai pas pu récupérer le programme cette fois. Tu peux aller dans l'onglet Programme pour le consulter ! 🗺️";
     }
 
+    // Extraire l'évaluation si présente dans le contenu
+    let evaluation: {
+      evaluation: 'correct' | 'partial' | 'incorrect';
+      reasoning: string;
+      mistakes?: string[];
+      question_topic?: string;
+      question_difficulty?: 'easy' | 'medium' | 'hard';
+    } | null = null;
+
+    // Chercher un JSON d'évaluation entre balises [EVAL_START] et [EVAL_END]
+    const evalMatch = finalContent.match(/\[EVAL_START\](.*?)\[EVAL_END\]/s);
+    if (evalMatch) {
+      try {
+        evaluation = JSON.parse(evalMatch[1].trim());
+        // Retirer les balises du contenu final
+        finalContent = finalContent.replace(/\[EVAL_START\].*?\[EVAL_END\]/s, '').trim();
+        console.log('[chat] Évaluation extraite:', evaluation);
+      } catch (e) {
+        console.error('[chat] Erreur parsing évaluation:', e);
+      }
+    }
+
     const result: {
       content: string;
       drawing?: { elements: unknown[]; appState?: Record<string, unknown> };
@@ -886,6 +942,13 @@ OUTILS DISPONIBLES :
       missionCompleted?: boolean;
       missionReward?: { xp: number; artifactName: string };
       redirectToGuardian?: { subject: string; guardianName: string };
+      evaluation?: {
+        evaluation: 'correct' | 'partial' | 'incorrect';
+        reasoning: string;
+        mistakes?: string[];
+        question_topic?: string;
+        question_difficulty?: 'easy' | 'medium' | 'hard';
+      };
     } = { content: finalContent };
     if (collectedDrawing) result.drawing = collectedDrawing;
     if (updateSandboxElements) result.updateSandbox = { elements: updateSandboxElements };
@@ -898,7 +961,10 @@ OUTILS DISPONIBLES :
       result.missionCompleted = true;
       result.missionReward = missionReward;
     }
-    console.log('[chat] Réponse finale:', { hasDisplaySchemaUrl: !!displaySchemaUrl, hasUpdateSandbox: !!updateSandboxElements });
+    if (evaluation) {
+      result.evaluation = evaluation;
+    }
+    console.log('[chat] Réponse finale:', { hasDisplaySchemaUrl: !!displaySchemaUrl, hasUpdateSandbox: !!updateSandboxElements, hasEvaluation: !!evaluation });
     return ok(result);
   } catch (e) {
     return err((e as Error).message);

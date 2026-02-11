@@ -118,17 +118,17 @@ function generateBalancedSlots(
   };
 
   const base30 = isVacation
-    ? [ { day: 1, start: '14:00' }, { day: 2, start: '14:00' }, { day: 3, start: '14:00' }, { day: 4, start: '14:00' }, { day: 5, start: '14:00' }, { day: 6, start: '14:00' },
-        { day: 1, start: '14:35' }, { day: 2, start: '14:35' }, { day: 3, start: '14:35' }, { day: 4, start: '14:35' }, { day: 5, start: '14:35' }, { day: 6, start: '14:35' },
-        { day: 1, start: '15:10' }, { day: 2, start: '15:10' }, { day: 3, start: '15:10' }, { day: 4, start: '15:10' }, { day: 5, start: '15:10' }, { day: 6, start: '15:10' } ]
-    : [ { day: 3, start: '14:00' }, { day: 5, start: '10:00' }, { day: 1, start: '18:30' }, { day: 2, start: '18:30' }, { day: 4, start: '18:30' }, { day: 6, start: '09:00' },
-        { day: 3, start: '14:35' }, { day: 5, start: '10:35' }, { day: 1, start: '19:05' }, { day: 2, start: '19:05' }, { day: 4, start: '19:05' }, { day: 6, start: '09:35' },
-        { day: 3, start: '15:10' }, { day: 5, start: '11:10' }, { day: 1, start: '19:40' }, { day: 2, start: '19:40' }, { day: 4, start: '19:40' }, { day: 6, start: '10:10' } ];
+    ? [{ day: 1, start: '14:00' }, { day: 2, start: '14:00' }, { day: 3, start: '14:00' }, { day: 4, start: '14:00' }, { day: 5, start: '14:00' }, { day: 6, start: '14:00' },
+    { day: 1, start: '14:35' }, { day: 2, start: '14:35' }, { day: 3, start: '14:35' }, { day: 4, start: '14:35' }, { day: 5, start: '14:35' }, { day: 6, start: '14:35' },
+    { day: 1, start: '15:10' }, { day: 2, start: '15:10' }, { day: 3, start: '15:10' }, { day: 4, start: '15:10' }, { day: 5, start: '15:10' }, { day: 6, start: '15:10' }]
+    : [{ day: 3, start: '14:00' }, { day: 5, start: '10:00' }, { day: 1, start: '18:30' }, { day: 2, start: '18:30' }, { day: 4, start: '18:30' }, { day: 6, start: '09:00' },
+    { day: 3, start: '14:35' }, { day: 5, start: '10:35' }, { day: 1, start: '19:05' }, { day: 2, start: '19:05' }, { day: 4, start: '19:05' }, { day: 6, start: '09:35' },
+    { day: 3, start: '15:10' }, { day: 5, start: '11:10' }, { day: 1, start: '19:40' }, { day: 2, start: '19:40' }, { day: 4, start: '19:40' }, { day: 6, start: '10:10' }];
   const base20 = isVacation
-    ? [ { day: 1, start: '15:45' }, { day: 2, start: '15:45' }, { day: 3, start: '15:45' }, { day: 4, start: '15:45' }, { day: 5, start: '15:45' }, { day: 6, start: '15:45' },
-        { day: 1, start: '16:10' }, { day: 2, start: '16:10' }, { day: 3, start: '16:10' }, { day: 4, start: '16:10' }, { day: 5, start: '16:10' }, { day: 6, start: '16:10' } ]
-    : [ { day: 3, start: '15:45' }, { day: 5, start: '11:45' }, { day: 1, start: '20:15' }, { day: 2, start: '20:15' }, { day: 4, start: '20:15' }, { day: 6, start: '10:45' },
-        { day: 3, start: '16:10' }, { day: 5, start: '12:10' }, { day: 1, start: '20:40' }, { day: 2, start: '20:40' }, { day: 4, start: '20:40' }, { day: 6, start: '11:10' } ];
+    ? [{ day: 1, start: '15:45' }, { day: 2, start: '15:45' }, { day: 3, start: '15:45' }, { day: 4, start: '15:45' }, { day: 5, start: '15:45' }, { day: 6, start: '15:45' },
+    { day: 1, start: '16:10' }, { day: 2, start: '16:10' }, { day: 3, start: '16:10' }, { day: 4, start: '16:10' }, { day: 5, start: '16:10' }, { day: 6, start: '16:10' }]
+    : [{ day: 3, start: '15:45' }, { day: 5, start: '11:45' }, { day: 1, start: '20:15' }, { day: 2, start: '20:15' }, { day: 4, start: '20:15' }, { day: 6, start: '10:45' },
+    { day: 3, start: '16:10' }, { day: 5, start: '12:10' }, { day: 1, start: '20:40' }, { day: 2, start: '20:40' }, { day: 4, start: '20:40' }, { day: 6, start: '11:10' }];
 
   const slots30 = buildSlots(30, count30, base30);
   const slots20 = buildSlots(20, count20, base20);
@@ -142,43 +142,32 @@ function generateBalancedSlots(
   return [...byDay.values()].flat().sort((a, b) => (a.day !== b.day ? a.day - b.day : a.startTime.localeCompare(b.startTime)));
 }
 
-const SYSTEM_PROMPT = `Tu es un ingénieur pédagogique et professeur de collège. Tu conçois des plannings de révision équilibrés pour aider l'élève à progresser dans TOUTES les matières.
+const SYSTEM_PROMPT = `Tu es un prof principal et parent bienveillant mais stratège. Ta mission : Créer le programme de révision ULTIME pour cet élève.
+Ta source de vérité :
+1. SON EMPLOI DU TEMPS (image fournie) : Ne mets JAMAIS de révision quand il a cours.
+2. SES NOTES (bulletin fourni) : 
+   - Matières "Danger" (Rouge) = Priorité absolue (révisions courtes et fréquentes).
+   - Matières "À surveiller" (Orange) = Priorité secondaire.
+   - Matières "OK" (Vert) = Entretien (moins fréquent).
+3. SA VIE D'ENFANT :
+   - Règle d'or : JAMAIS de révision immédiate après l'école. Laisse 1h30 de buffer (trajet/goûter/repos). 
+   - Si cours finit à 17h -> Révision possible à partir de 18h30.
+   - Si mercredi après-midi libre -> Profites-en ! (mais pas 4h d'affilée).
+   - Samedi/Dimanche -> Créneaux le matin (cerveau frais).
 
-RÔLE : Tu proposes des créneaux de révision hebdomadaires qui couvrent l'ensemble des matières (danger, surveiller, reviser, ok) de façon équilibrée : plus de créneaux pour les matières en difficulté, mais INCLUSION de toutes les matières pour consolider et maintenir le niveau.
-
-RÈGLE CRITIQUE - BUFFER APRÈS LA FIN DES COURS :
-Si l'enfant termine à 17h ou 17h30, il est IMPOSSIBLE de réviser juste après :
-- Trajet école-maison : 15 à 30 min
-- Goûter / pause : 15 à 20 min
-- Temps de repos : 10 à 15 min
-→ Minimum 1h30 après la fin des cours avant de proposer une révision.
-Exemple : si les cours finissent à 17h ou 17h30, ne propose PAS de créneau avant 18h30 ou 19h au plus tôt.
-
-Objectif : identifier les plages réellement libres (après trajet, goûter, repos) et proposer des créneaux variés pour couvrir toutes les matières.
-- Durées possibles : quiz 15 min, révision courte 30 min, révision standard 1h. Varie les durées pour équilibrer (ex : 2×30 min + 1×1h = 2h/jour).
-- Privilégie : mercredi après-midi, samedi matin, soirées avec buffer suffisant après les cours
-- Jours : 0 = dimanche, 1 = lundi, 2 = mardi, 3 = mercredi, 4 = jeudi, 5 = vendredi, 6 = samedi
-- Heures au format HH:mm (ex: 18:30, 19:00, 14:00)
-
-Retourne UNIQUEMENT un JSON valide, sans markdown :
+FORMAT ATTENDU (JSON) :
 {
-  "slots": [ { "day": 3, "startTime": "14:00", "endTime": "15:00" }, ... ],
-  "vacation_slots": [ { "day": 1, "startTime": "10:00", "endTime": "11:00" }, ... ],
-  "reasoning": "court résumé (optionnel)"
+  "slots": [ { "day": 1, "startTime": "18:30", "endTime": "19:00", "subject": "Maths" }, ... ],
+  "vacation_slots": [ ... ]
 }
 
-VACANCES (OBLIGATOIRE) — "vacation_slots" : créneaux PENDANT les vacances scolaires. Les révisions se font APRÈS 13h :
-- AUCUN créneau avant 13:00. Varie les durées : quiz 15 min (ex: 14:00-14:15), révision 30 min (14:30-15:00), révision 1h (15:30-16:30).
-- 6 à 12 créneaux répartis sur Lundi-Samedi. Max 2h de révision par jour.
+RÈGLES D'OR DU PLANNING :
+- SEMAINE SCOLAIRE : Viser 3 à 5 créneaux de 20-30 min. C'est suffisant si c'est régulier.
+- VACANCES : Viser 1h à 1h30 par jour (matin de préférence).
+- VARIER LES MATIÈRES : Ne mets pas que des Maths. Alterne une matière difficile et une matière facile.
+- COURT MAIS INTENSE : Privilégie 20 min de travail focalisé plutôt que 1h de "je regarde le plafond".
 
-Règles :
-- day : 0 à 6 (0 = dimanche)
-- startTime et endTime : HH:mm (format 24h)
-- Jamais de créneau dans les 1h30 suivant la fin des cours (trajet + goûter + repos)
-- subject : optionnel, matière prioritaire si identifiable
-- Propose des créneaux variés : 15 min (quiz), 30 min, 1h. Plus de créneaux courts = plus de matières couvertes.
-- LIMITE ABSOLUE : maximum 2h de révision par jour. Ne propose jamais plus de 2h de créneaux pour un même jour.
-- ÉQUILIBRE PÉDAGOGIQUE : Si des matières sont fournies (bulletin), propose assez de créneaux pour que TOUTES apparaissent : danger et surveiller en priorité, mais aussi reviser et ok. Un bon planning couvre toutes les matières de la semaine.`;
+Inclus toujours le champ "subject" dans les slots pour dire QUELLE matière réviser à ce moment-là (en fonction des points faibles identifiés).`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -254,6 +243,8 @@ Deno.serve(async (req) => {
         model: 'gpt-4o',
         messages,
         max_tokens: 1500,
+        temperature: 0,
+        seed: 42,
         response_format: { type: 'json_object' },
       }),
     });

@@ -62,12 +62,32 @@ export function ExcalidrawSandbox({
     clearImageToLoad();
     (async () => {
       try {
-        console.log('[ExcalidrawSandbox] Fetching via proxy...', url);
         // Use OUR OWN proxy in Edge Function to bypass CORS safely
         const bucketUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
+
+        // STRICT: Toujours utiliser la clé ANON pour l'Edge Function, comme dans chatStore.ts
+        // Le token utilisateur cause des 401 (problème Gateway ou RLS).
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        console.log('[ExcalidrawSandbox] Auth force Anon Key:', {
+          exists: !!anonKey,
+          prefix: anonKey ? anonKey.substring(0, 10) + '...' : 'MISSING',
+          keyLength: anonKey?.length
+        });
+
+        if (!anonKey) {
+          console.error('[ExcalidrawSandbox] CRITICAL: VITE_SUPABASE_ANON_KEY is missing!');
+        }
+
         const proxyUrl = `${bucketUrl}/functions/v1/chat?image_url=${encodeURIComponent(url)}`;
 
-        const res = await fetch(proxyUrl);
+        const res = await fetch(proxyUrl, {
+          headers: {
+            Authorization: `Bearer ${anonKey}`,
+          },
+        });
+
+
         if (!res.ok) throw new Error(`Fetch error: ${res.status}`);
         const blob = await res.blob();
         const mimeType = blob.type || 'image/png';
@@ -109,7 +129,11 @@ export function ExcalidrawSandbox({
         }
 
         const current = (excalidrawAPI.getSceneElements?.() ?? []) as unknown[];
-        // ... rest of code
+
+        // Nettoyage : retirer les anciennes images pour éviter la superposition (demande utilisateur)
+        // On garde les annotations (textes, flèches...)
+        const currentWithoutImages = current.filter((el: any) => el.type !== 'image');
+
         const imgEl = {
           type: 'image',
           id: `img-el-${Date.now()}`,
@@ -118,7 +142,7 @@ export function ExcalidrawSandbox({
           y: 60,
           width: width,
           height: height,
-          naturalWidth: naturalWidth, // Important for Excalidraw to know original size
+          naturalWidth: naturalWidth,
           naturalHeight: naturalHeight,
           angle: 0,
           locked: true,
@@ -144,7 +168,7 @@ export function ExcalidrawSandbox({
           updated: Date.now(),
           link: null,
         };
-        const merged = [imgEl, ...current];
+        const merged = [imgEl, ...currentWithoutImages];
         excalidrawAPI.updateScene?.({ elements: merged, captureUpdate: 'IMMEDIATELY' as const });
         setElements(merged);
         console.log('[ExcalidrawSandbox] Image element added to scene');

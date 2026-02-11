@@ -9,14 +9,29 @@ interface BulletinCardProps {
   onUpdate?: (updated: BulletinAnalysis) => void;
 }
 
-function getTrendIcon(trend: string) {
+function getTrendIcon(trend: string, status: string) {
+  // Determine color based strictly on status
+  let colorClass = "text-emerald-400";
+  let bgClass = "bg-emerald-400";
+
+  if (status === 'danger' || status === 'high') {
+    colorClass = "text-rose-500";
+    bgClass = "bg-rose-500";
+  } else if (status === 'surveiller') {
+    colorClass = "text-orange-500";
+    bgClass = "bg-orange-500";
+  } else if (status === 'reviser' || status === 'medium') {
+    colorClass = "text-amber-400";
+    bgClass = "bg-amber-400";
+  }
+
   switch (trend) {
     case 'up':
-      return <TrendingUp className="w-4 h-4 text-emerald-400" />;
+      return <TrendingUp className={`w-4 h-4 ${colorClass}`} />;
     case 'down':
-      return <TrendingDown className="w-4 h-4 text-rose-400" />;
+      return <TrendingDown className={`w-4 h-4 ${colorClass}`} />;
     default:
-      return <div className="w-4 h-4 rounded-full bg-amber-400" />;
+      return <div className={`w-2.5 h-2.5 rounded-full ${bgClass}`} />;
   }
 }
 
@@ -124,7 +139,7 @@ export function BulletinCard({ analysis, showFileLink = true, onUpdate }: Bullet
                 onClick={() => canEdit && (isEditing ? setEditingIndex(null) : setEditingIndex(index))}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  {getTrendIcon(subject.trend)}
+                  {getTrendIcon(subject.trend, currentStatus)}
                   <span className="text-amber-100 text-sm truncate">{subject.name}</span>
                 </div>
                 <div className="flex items-center flex-shrink-0" onClick={(e) => e.stopPropagation()}>

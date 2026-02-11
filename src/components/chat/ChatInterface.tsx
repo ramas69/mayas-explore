@@ -96,6 +96,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null); // New ref for container
   const { messages, isLoading, isTyping, sendMessage, loadMessages, clearChat, redirectModalToShow, clearRedirectModal } = useChatStore();
   const { getChaptersBySubject } = useCurriculumStore();
 
@@ -111,7 +112,17 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
   }, [sessionId, hasValidSession, loadMessages, clearChat]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Autoscroll vers le bas du chat uniquement
+    const timer = setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({
+          behavior: 'auto',  // Pas de smooth pour éviter les bugs
+          block: 'nearest',   // Scroll minimal
+          inline: 'nearest'   // Pas de scroll horizontal
+        });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
   }, [messages, isTyping]);
 
   const chatContext = selectedChapter
@@ -246,7 +257,15 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
       </div>
 
       {/* Messages - scroll interne uniquement dans cette zone */}
-      <div className="flex-1 min-h-0 overflow-y-scroll p-3 sm:p-4 space-y-3 sm:space-y-4 overscroll-contain">
+      <div
+        ref={chatContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4"
+        style={{
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y'
+        }}
+      >
         {showGuardianPicker && (
           <GuardianPicker onSelectGuardian={onSelectGuardian} />
         )}
