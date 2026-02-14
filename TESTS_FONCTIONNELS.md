@@ -188,20 +188,67 @@
 - [ ] **Image invalide** : gestion de l'erreur
 - [ ] **Texte très long** : pas de débordement
 - [ ] **Connexion lente** : indicateurs de chargement
+ 
+ ### 7. Tests de Sécurité & Robustesse (NOUVEAU)
+ - [ ] **Protection SSRF** : Essayer de charger une image depuis une IP locale (ex: 127.0.0.1) → Doit être bloqué.
+ - [ ] **Domaines Autorisés** : Charger une image depuis Wikipedia → OK. Depuis un site inconnu → Bloqué.
+ - [ ] **Validation Temps Serveur** : Tenter de modifier le `dailyMinutesUsed` envoyé par le client → Le serveur doit utiliser sa propre valeur et bloquer si dépassé.
+ - [ ] **Format JSON IA** : Vérifier que les réponses de l'IA sont bien affichées (pas de JSON brut visible).
+ - [ ] **Parsing Résilient** : Vérifier que si l'IA répond mal (JSON invalide), un message d'erreur propre s'affiche ("Je n'ai pas compris...").
 
 ---
 
-## 🎯 SCÉNARIOS DE TEST COMPLETS
+ ### 8. Inscription & Onboarding (MANQUANT)
+ - [ ] **Invitation Parent** : Le parent invite un enfant par email → Email reçu.
+ - [ ] **Inscription Enfant (Lien)** : L'enfant clique sur le lien, définit son mot de passe → Compte créé et lié.
+ - [ ] **Inscription Enfant (Code)** : L'enfant s'inscrit seul avec le mail du parent → Compte "En attente" côté parent.
+ - [ ] **Validation Compte** : Le parent valide le compte en attente → L'enfant peut accéder à l'app.
+ - [ ] **Tutoriel** : Le nouvel élève voit-il le tutoriel/onboarding au premier lancement ?
 
-### Scénario 1 : Premier Jour d'un Élève
-1. Connexion pour la première fois
-2. Découverte de la carte des matières
-3. Sélection d'un gardien (ex: SVT)
-4. Première conversation avec l'IA
-5. Réception d'un schéma dans le Grimoire
-6. Annotation du schéma
-7. Gain de XP et artefact
-8. Déconnexion
+ ### 9. Intelligence Contextuelle (IA)
+ - [ ] **Alerte Bulletin** : Si la matière est "fragile" dans le bulletin, l'IA doit être plus encourageante/détaillée.
+ - [ ] **Priorité Parent** : Si le parent a mis une note "Travailler la géométrie", l'IA doit en parler ou proposer des exercices liés.
+ - [ ] **Pause Planning** : Si la session dure longtemps et qu'un break est prévu au planning, l'IA doit le suggérer ?
+ - [ ] **Mémoire** : L'IA doit se souvenir des conversations précédentes (ex: "Comme on a vu pour les volcans...").
+
+---
+ 
+ ### 10. Landing Page (Site Vitrine)
+ - [ ] **Hero Section** : Le titre et le CTA "Commencer l'aventure" sont visibles.
+ - [ ] **Navigation** : Les liens du menu scrollent vers les bonnes sections.
+ - [ ] **Stats** : Les compteurs s'animent au scroll.
+ - [ ] **Responsive** : Le menu hamburger fonctionne sur mobile.
+ - [ ] **Footer** : Les liens légaux et sociaux sont présents.
+ - [ ] **Redirection** : Si connecté, la Landing redirige vers le Dashboard approprié.
+
+ ### 11. Super Admin Dashboard (Gestion)
+ - [ ] **Accès Sécurisé** : Un utilisateur normal ne peut PAS accéder à `/admin`.
+ - [ ] **Vue d'Ensemble** : Stats globales (Nombre de parents, enfants, programmes).
+ - [ ] **Gestion Utilisateurs** : Voir la liste des parents et enfants, ainsi que l'XP/Rang des enfants.
+ - [ ] **Scraping Perplexity** : Lancer un scraping manuel (ex: "Maths 6ème") et voir les logs.
+ - [ ] **Programme Scolaire** : Vérifier que les chapitres importés s'affichent correctement par classe.
+ - [ ] **Sources** : Ajouter/Supprimer une source de données pour le scraping.
+
+ ### 12. Pages d'Erreur & Redirections
+ - [ ] **Page 404** : Taper une URL invalide (`/toto`) → Affiche la page "Perdu dans la jungle ?".
+ - [ ] **Redirection Auth** : Tenter d'accéder à `/app/map` sans être connecté → Renvoie vers `/auth`.
+ - [ ] **Redirection Rôle** : Un élève tentant d'aller sur `/parent` est redirigé vers `/app`.
+
+ ---
+ 
+ ## 🎯 SCÉNARIOS DE TEST COMPLETS
+
+### Scénario 1 : Premier Jour d'un Élève (Inscription + Découverte)
+1. Réception de l'invitation par email
+2. Création du mot de passe
+3. Onboarding / Tutoriel
+4. Découverte de la carte
+5. Sélection d'un gardien (ex: SVT)
+6. Première conversation avec l'IA
+7. Réception d'un schéma dans le Grimoire
+8. Annotation du schéma
+9. Gain de XP et artefact
+10. Déconnexion
 
 ### Scénario 2 : Parent Configure son Enfant
 1. Connexion parent

@@ -108,7 +108,7 @@ export interface Session {
 export interface ChatMessage {
   id: string;
   session_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   timestamp: string;
   has_drawing?: boolean;

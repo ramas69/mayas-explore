@@ -124,15 +124,14 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
         onMouseLeave={() => setHoveredSubject(null)}
         onTouchStart={() => setHoveredSubject(subject)}
         onTouchEnd={() => setTimeout(() => setHoveredSubject(null), 200)}
-        className={`relative w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-300 text-left active:scale-[0.98] ${
-          status === 'locked'
+        className={`relative w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-300 text-left active:scale-[0.98] ${status === 'locked'
             ? 'bg-slate-800/80 border-slate-600/50 opacity-75'
             : status === 'danger'
-            ? 'bg-rose-900/70 border-rose-500/60 shadow-rose-500/20 shadow-lg'
-            : status === 'mastered'
-            ? 'bg-emerald-900/70 border-emerald-500/60 shadow-emerald-500/20 shadow-lg'
-            : 'bg-amber-900/70 border-amber-500/60 shadow-amber-500/20 shadow-lg'
-        } ${status !== 'locked' ? 'card-border-light' : ''}`}
+              ? 'bg-rose-900/70 border-rose-500/60 shadow-rose-500/20 shadow-lg'
+              : status === 'mastered'
+                ? 'bg-emerald-900/70 border-emerald-500/60 shadow-emerald-500/20 shadow-lg'
+                : 'bg-amber-900/70 border-amber-500/60 shadow-amber-500/20 shadow-lg'
+          } ${status !== 'locked' ? 'card-border-light' : ''}`}
         style={status !== 'locked' ? { ['--border-light-duration' as string]: `${5 + (index % 5) * 1.5}s` } : undefined}
       >
         {status !== 'locked' && <div className="card-border-light-dot" aria-hidden />}
@@ -243,97 +242,95 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
 
       {/* Vue desktop : carte avec régions en position absolue */}
       <div className="hidden md:block absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 pointer-events-auto">
-      {subjectsToShow.map((subject, index) => {
-        const pos = REGION_POSITIONS[subject];
-        const status = getSubjectStatus(subject);
-        const bulletinData = getBulletinDataForSubject(subject);
-        const grade = bulletinData ? getGradeFromStatus(bulletinData.status) : null;
-        const subjProgress = progress.bySubject[subject];
-        const isHovered = hoveredSubject === subject;
+        <div className="absolute inset-0 pointer-events-none">
+          {subjectsToShow.map((subject, index) => {
+            const pos = REGION_POSITIONS[subject];
+            const status = getSubjectStatus(subject);
+            const bulletinData = getBulletinDataForSubject(subject);
+            const grade = bulletinData ? getGradeFromStatus(bulletinData.status) : null;
+            const subjProgress = progress.bySubject[subject];
+            const isHovered = hoveredSubject === subject;
 
-        return (
-          <div
-            key={subject}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 cursor-pointer group active:scale-95 min-w-[56px] min-h-[52px]"
-            style={{ top: pos.top, left: pos.left, zIndex: isHovered ? 50 : 10 + index }}
-            onMouseEnter={() => setHoveredSubject(subject)}
-            onMouseLeave={() => setHoveredSubject(null)}
-            onClick={() => setSelectedSubject(subject)}
-            onTouchStart={() => setHoveredSubject(subject)}
-            onTouchEnd={() => setTimeout(() => setHoveredSubject(null), 200)}
-          >
-            {/* Marqueur doré (badge maya) animé */}
-            <div
-              className={`absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full transition-all duration-300 ${
-                status === 'locked' ? 'opacity-40' : 'opacity-100'
-              } ${isHovered ? 'scale-125' : ''} ${status !== 'locked' ? 'badge-float badge-glow' : ''}`}
-              style={{
-                animationDelay: `${index * 0.32}s`,
-                ['--badge-glow-duration' as string]: `${2.4 + (index % 5) * 0.7}s`,
-                ['--badge-shimmer-duration' as string]: `${3.2 + (index % 7) * 0.5}s`,
-              }}
-            >
-              <div className="relative badge-shimmer bg-transparent">
-                <img
-                  src="/step3-badge.png"
-                  alt="Badge"
-                  className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 object-contain drop-shadow-[0_0_8px_rgba(255,215,0,0.3)]"
-                />
-              </div>
-            </div>
+            return (
+              <div
+                key={subject}
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 cursor-pointer group active:scale-95 min-w-[56px] min-h-[52px]"
+                style={{ top: pos.top, left: pos.left, zIndex: isHovered ? 50 : 10 + index }}
+                onMouseEnter={() => setHoveredSubject(subject)}
+                onMouseLeave={() => setHoveredSubject(null)}
+                onClick={() => setSelectedSubject(subject)}
+                onTouchStart={() => setHoveredSubject(subject)}
+                onTouchEnd={() => setTimeout(() => setHoveredSubject(null), 200)}
+              >
+                {/* Marqueur doré (badge maya) animé */}
+                <div
+                  className={`absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full transition-all duration-300 ${status === 'locked' ? 'opacity-40' : 'opacity-100'
+                    } ${isHovered ? 'scale-125' : ''} ${status !== 'locked' ? 'badge-float badge-glow' : ''}`}
+                  style={{
+                    animationDelay: `${index * 0.32}s`,
+                    ['--badge-glow-duration' as string]: `${2.4 + (index % 5) * 0.7}s`,
+                    ['--badge-shimmer-duration' as string]: `${3.2 + (index % 7) * 0.5}s`,
+                  }}
+                >
+                  <div className="relative badge-shimmer bg-transparent">
+                    <img
+                      src="/step3-badge.png"
+                      alt="Badge"
+                      className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 object-contain drop-shadow-[0_0_8px_rgba(255,215,0,0.3)]"
+                    />
+                  </div>
+                </div>
 
-            {/* Structure / Temple (région) */}
-            <div
-              className={`relative w-14 h-12 sm:w-20 sm:h-16 lg:w-24 lg:h-20 rounded-md sm:rounded-lg transition-all duration-300 ${status !== 'locked' ? 'card-border-light' : ''} ${
-                status === 'locked'
-                  ? 'bg-slate-800/80 border border-slate-600/50 shadow-xl'
-                  : status === 'danger'
-                  ? 'bg-rose-900/70 border-2 border-rose-500/60 shadow-rose-500/20 shadow-xl'
-                  : status === 'mastered'
-                  ? 'bg-emerald-900/70 border-2 border-emerald-500/60 shadow-emerald-500/20 shadow-xl'
-                  : 'bg-amber-900/70 border-2 border-amber-500/60 shadow-amber-500/20 shadow-xl'
-              } ${status === 'locked' ? 'opacity-60' : ''} ${isHovered ? 'scale-110 z-10' : ''}`}
-              style={status !== 'locked' ? { ['--border-light-duration' as string]: `${5 + (index % 5) * 1.5}s` } : undefined}
-            >
-              {/* Point lumineux qui suit la bordure */}
-              {status !== 'locked' && (
-                <div className="card-border-light-dot" aria-hidden />
-              )}
-              {/* Brume pour locked */}
-              {status === 'locked' && (
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-slate-400/40 to-slate-600/30 pointer-events-none" />
-              )}
-
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-1 sm:p-1.5 gap-0.5 overflow-hidden">
-                <img
-                  src={SUBJECT_ICON_PATHS[subject]}
-                  alt={subject}
-                  className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 object-contain flex-shrink-0"
-                />
-                <span className="text-[8px] sm:text-[9px] lg:text-[10px] font-bold text-amber-100 truncate max-w-full px-0.5 text-center leading-tight">
-                  {subject}
-                </span>
-                <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-full">
-                  {grade != null && (
-                    <div className="gauge-maya w-full max-w-[48px] h-1">
-                      <div
-                        className="gauge-maya-fill"
-                        style={{ width: `${(grade / 20) * 100}%` }}
-                      />
-                    </div>
+                {/* Structure / Temple (région) */}
+                <div
+                  className={`relative w-14 h-12 sm:w-20 sm:h-16 lg:w-24 lg:h-20 rounded-md sm:rounded-lg transition-all duration-300 ${status !== 'locked' ? 'card-border-light' : ''} ${status === 'locked'
+                      ? 'bg-slate-800/80 border border-slate-600/50 shadow-xl'
+                      : status === 'danger'
+                        ? 'bg-rose-900/70 border-2 border-rose-500/60 shadow-rose-500/20 shadow-xl'
+                        : status === 'mastered'
+                          ? 'bg-emerald-900/70 border-2 border-emerald-500/60 shadow-emerald-500/20 shadow-xl'
+                          : 'bg-amber-900/70 border-2 border-amber-500/60 shadow-amber-500/20 shadow-xl'
+                    } ${status === 'locked' ? 'opacity-60' : ''} ${isHovered ? 'scale-110 z-10' : ''}`}
+                  style={status !== 'locked' ? { ['--border-light-duration' as string]: `${5 + (index % 5) * 1.5}s` } : undefined}
+                >
+                  {/* Point lumineux qui suit la bordure */}
+                  {status !== 'locked' && (
+                    <div className="card-border-light-dot" aria-hidden />
                   )}
-                  {subjProgress && (
-                    <span className="text-[8px] sm:text-[9px] text-amber-200/50">
-                      {subjProgress.completed}/{subjProgress.total}
+                  {/* Brume pour locked */}
+                  {status === 'locked' && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-slate-400/40 to-slate-600/30 pointer-events-none" />
+                  )}
+
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-1 sm:p-1.5 gap-0.5 overflow-hidden">
+                    <img
+                      src={SUBJECT_ICON_PATHS[subject]}
+                      alt={subject}
+                      className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 object-contain flex-shrink-0"
+                    />
+                    <span className="text-[8px] sm:text-[9px] lg:text-[10px] font-bold text-amber-100 truncate max-w-full px-0.5 text-center leading-tight">
+                      {subject}
                     </span>
-                  )}
+                    <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-full">
+                      {grade != null && (
+                        <div className="gauge-maya w-full max-w-[48px] h-1">
+                          <div
+                            className="gauge-maya-fill"
+                            style={{ width: `${(grade / 20) * 100}%` }}
+                          />
+                        </div>
+                      )}
+                      {subjProgress && (
+                        <span className="text-[8px] sm:text-[9px] text-amber-200/50">
+                          {subjProgress.completed}/{subjProgress.total}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
         </div>
       </div>
 

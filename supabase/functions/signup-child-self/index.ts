@@ -53,21 +53,33 @@ Deno.serve(async (req) => {
     const validClasses = ['6ème', '5ème', '4ème', '3ème'];
     const classeValue = classe && validClasses.includes(classe) ? classe : undefined;
 
-    const { data, error } = await supabase.auth.admin.createUser({
+    // Utiliser le client Anon pour que Supabase envoie l'email de confirmation (template Enfant)
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!anonKey) {
+      console.error('SUPABASE_ANON_KEY manquant !');
+      throw new Error('Configuration serveur incomplète (ANON_KEY).');
+    }
+    const supabaseAnon = createClient(supabaseUrl, anonKey);
+
+    console.log('[signup-child-self] Tentative signUp pour:', emailTrimmed);
+
+    const { data, error } = await supabaseAnon.auth.signUp({
       email: emailTrimmed,
       password,
-      email_confirm: true,
-      user_metadata: {
-        role: 'enfant',
-        full_name: fullName.trim(),
-        parent_id: parentId,
-        parent_email: parentId ? null : parentEmailTrimmed,
-        is_approved: false,
-        ...(classeValue && { classe: classeValue }),
+      options: {
+        data: {
+          role: 'enfant',
+          full_name: fullName.trim(),
+          parent_id: parentId,
+          parent_email: parentId ? null : parentEmailTrimmed,
+          is_approved: false,
+          ...(classeValue && { classe: classeValue }),
+        },
       },
     });
 
     if (error) {
+      console.error('[signup-child-self] Erreur signUp:', error);
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -75,37 +87,71 @@ Deno.serve(async (req) => {
     }
 
     if (!data?.user) {
+      console.error('[signup-child-self] Pas de user retourné.');
       return new Response(
-        JSON.stringify({ error: 'La création du compte a échoué. Réessaie.' }),
+        JSON.stringify({ error: 'La création du compte a échoué (pas de données).' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Persister explicitement parent_email dans profiles (le trigger peut ne pas l'écrire correctement)
-    const profileParentEmail = parentId ? null : parentEmailTrimmed;
+    console.log('[signup-child-self] User créé:', data.user.id);
+
+    // Persister explicitement parent_email dans profiles via UPSERT pour garantir la donnée
+    const profileData = {
+      id: data.user.id,
+      email: emailTrimmed,
+      role: 'enfant',
+      parent_id: parentId,
+      parent_email: parentId ? null : parentEmailTrimmed, // C'est ici que l'email est sauvegardé
+      full_name: fullName.trim(),
+      is_approved: false,
+      ...(classeValue && { classe: classeValue }),
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('[signup-child-self] Upsert profil:', profileData);
+
     const { error: profileErr } = await supabase
       .from('profiles')
-      .update({
-        parent_id: parentId,
-        parent_email: profileParentEmail,
-        full_name: fullName.trim(),
-        ...(classeValue && { classe: classeValue }),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', data.user.id);
+      .upsert(profileData); // Upsert remplace le trigger si besoin
 
     if (profileErr) {
-      console.error('[signup-child-self] Erreur mise à jour profil:', profileErr);
+      console.error('[signup-child-self] Erreur upsert profil:', profileErr);
+      // On ne bloque pas pour autant, l'user est créé
+    } else {
+      console.log('[signup-child-self] Profil mis à jour avec succès.');
     }
+
+    // --- INVITATION PARENT (SUPABASE AUTH) ---
+    // Si le parent n'existe pas, on l'invite automatiquement
+    if (!parentId) {
+      console.log('[signup-child-self] Envoi invitation parent à:', parentEmailTrimmed);
+      const { error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(parentEmailTrimmed, {
+        data: {
+          role: 'parent',
+          full_name: 'Parent',
+        },
+        redirectTo: `${Deno.env.get('SITE_URL') || 'https://maya-explorer.com'}/auth?mode=login&role=parent`,
+      });
+
+      if (inviteErr) {
+        console.error('[signup-child-self] Erreur invitation parent:', inviteErr);
+      } else {
+        console.log('[signup-child-self] Invitation envoyée.');
+      }
+    } else {
+      console.log('[signup-child-self] Parent existe déjà (id: ' + parentId + '), pas d\'invitation.');
+    }
+    // ---------------------------------------
 
     return new Response(
       JSON.stringify({ success: true, user: { id: data.user.id } }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
-    console.error('[signup-child-self]', err);
+    console.error('[signup-child-self] Exception:', err);
     return new Response(
-      JSON.stringify({ error: (err as Error).message || 'Erreur serveur' }),
+      JSON.stringify({ error: (err as Error).message || 'Erreur serveur critique' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -13,17 +13,16 @@ import {
 import type { ChatMessage, Subject } from '../types';
 import { getMentorForSubject } from '../lib/mentorGroups';
 import { findBulletinDataForSubject } from '../lib/subjectMapping';
-import { EVALUATION_INSTRUCTIONS } from '../lib/evaluationPrompt';
 import {
   saveStudentAnswer,
   calculateXP,
-  getRecentErrors,
-  getStrengths,
   scheduleRetry,
   getErrorCount,
   getStreak,
   getStreakBonus,
 } from '../lib/evaluationUtils';
+import { buildSystemPrompt, type MentorContext } from '../lib/chatPrompts';
+import { LOADING_MESSAGES } from '../lib/chatConstants';
 
 export interface RedirectGuardianData {
   subject: string;
@@ -33,6 +32,7 @@ export interface RedirectGuardianData {
 interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
+  loadingStatus: string | null; // NOUVEAU : Message d'état (ex: "Décodage...")
   currentSessionId: string | null;
   isTyping: boolean;
   redirectModalToShow: RedirectGuardianData | null;
@@ -43,6 +43,7 @@ interface ChatState {
   sendDrawing: (drawingData: unknown, sessionId: string) => Promise<void>;
   receiveAIMessage: (content: string, sessionId: string, drawingData?: unknown, opts?: { missionCompleted?: boolean; studentId?: string }) => Promise<void>;
   clearChat: () => void;
+  resetState: () => void;
   clearRedirectModal: () => void;
 }
 
@@ -54,131 +55,12 @@ export interface ChatContext {
   curriculumChapters?: { chapter_name: string; status: string }[];
 }
 
-const BASE_PROMPT = `# PROMPT : LE GARDIEN DU SAVOIR (MODÈLE COLLÈGE)
 
-## 1. PERSONNAGE ET TON
-- **Rôle :** Tu es une mentor IA experte, incarnée par une exploratrice de cités perdues (type Tomb Raider).
-- **Style :** Aventurier mais pédagogique. Ton vocabulaire est celui de l'exploration : *expéditions, artefacts, stèles, mécanismes anciens, pièges, sables mouvants.*
-- **Posture :** Bienveillante mais exigeante. Tu ne donnes pas la solution, tu aides l'élève à devenir un "maître explorateur".
-
-## 2. ADAPTATION AU NIVEAU (VARIABLE CLASSE)
-- **Cible :** Élèves du Collège uniquement.
-- **Action :** Tu dois ajuster ton vocabulaire, la complexité des concepts et tes attentes en fonction de la **classe** de l'élève (6ème, 5ème, 4ème ou 3ème). 
-  - *Exemple :* Une explication en 6ème sera imagée, tandis qu'en 3ème, elle utilisera les termes techniques du Brevet.
-
-## 3. MOTEUR DE GUIDAGE SOCRATIQUE (OBLIGATOIRE)
-- **Règle d'Or :** Ne donne JAMAIS la définition ou la réponse finale directement.
-- **Stratégie d'Étayage (Si l'élève bloque) :**
-  1. **Niveau 1 (Observation) :** Questionne sur un détail précis de l'énoncé ou du schéma.
-  2. **Niveau 2 (L'Indice "Torche") :** Propose une analogie concrète ou rappelle une règle de cours essentielle sans l'appliquer à sa place.
-  3. **Niveau 3 (Décomposition) :** Divise l'énigme complexe en 2 ou 3 mini-étapes simples (les "Dalles de franchissement").
-- **Identification des erreurs :** Présente les fautes comme des "pièges à désactiver". Explique pourquoi le piège s'est déclenché (l'erreur logique) avant de proposer une nouvelle piste.
-
-## 4. RÈGLES PÉDAGOGIQUES ET TECHNIQUES
-- **Priorité Hors-Sujet :** Tu es expert uniquement dans TA matière. Si la question concerne une autre discipline, suggère le bon Gardien.
-- **Support Visuel (TOUTES MATIÈRES) :** Pour tout concept qui gagne à être illustré, appelle impérativement la fonction : \`display_schema(topic: terme_anglais)\`.
-  - *Maths/Sciences :* Schémas, géométrie, anatomie.
-  - *Histoire-Géo :* Cartes, pyramides, fresques, lieux historiques.
-  - *Français/Langues :* Arbres grammaticaux, cartes mentales, illustrations de vocabulaire.
-  - *Arts :* Œuvres célèbres, techniques.
-- **Gestion de l'énergie :** Si l'élève semble fatigué ou répond "je ne sais pas" plusieurs fois, propose une "pause au campement".
-- **Analogie Maya :** Relie toujours les concepts théoriques à des situations d'exploration.
-
-## 5. SYSTÈME DE RÉCOMPENSE
-- **XP :** Attribue des points XP (ex: +20 XP) pour chaque étape franchie.
-- **Célébration :** Félicite avec enthousiasme chaque victoire ("Un mécanisme vient de s'enclencher !").
-
-## 6. FORMAT DE RÉPONSE (STRICT)
-- **Concision :** 3 phrases maximum.
-- **Structure (avec sauts de ligne) :**
-  1. 🏛️ Une courte phrase d'ambiance d'aventure.
-  
-  2. Un feedback ou un indice de guidage (selon l'étape de l'élève).
-  
-  3. 🔦 Une question précise pour engager le dialogue.
-- **Mise en forme :** Utilise des **emojis** (🏛️ ✨ 🗺️ ✏️ 🔦) et mets les **mots-clés** en gras.
-- **Exemple de réponse parfaite :**
-  "🏛️ Exploratrice, excellente observation des fresques !
-  
-  Le **sang oxygéné** circule effectivement à part dans ce temple vital.
-  
-  🔦 Sais-tu quel mécanisme l'empêche de se mélanger ? ✏️"` + EVALUATION_INSTRUCTIONS;
-
-interface MentorContext extends ChatContext {
-  bulletinAlert?: string;
-  planningSlots?: string;
-  parentPriorityAlert?: string;
-  chapterStatus?: 'pas_vu' | 'vu_en_classe' | 'maitrise';
-}
-
-async function buildSystemPrompt(context?: MentorContext, studentId?: string): Promise<string> {
-  let prompt = BASE_PROMPT;
-
-  // Récupérer les erreurs récentes et points forts
-  if (studentId) {
-    const { data: recentErrors } = await getRecentErrors(studentId, 5);
-    const { data: strengths } = await getStrengths(studentId);
-
-    if (recentErrors && recentErrors.length > 0) {
-      prompt += `\n\n⚠️ POINTS FAIBLES DÉTECTÉS (repose ces questions) :\n`;
-      recentErrors.forEach(error => {
-        prompt += `- ${error.question_topic} : L'élève a fait ${error.retry_count + 1} erreur(s). `;
-        prompt += `Dernière erreur : "${error.student_answer}". `;
-        if (error.evaluation_details?.reasoning) {
-          prompt += `Raison : ${error.evaluation_details.reasoning}\n`;
-        }
-      });
-      prompt += `\nREPOSE ces questions de manière différente pour vérifier si l'élève a compris.\n`;
-    }
-
-    if (strengths && strengths.length > 0) {
-      prompt += `\n\n✅ POINTS FORTS (l'élève maîtrise) :\n`;
-      strengths.forEach(s => {
-        prompt += `- ${s.topic} : ${s.success_rate}% de réussite (${s.correct_attempts}/${s.total_attempts})\n`;
-      });
-      prompt += `\nTu peux augmenter la difficulté sur ces sujets.\n`;
-    }
-  }
-  if (context?.subject || context?.chapterName || context?.curriculumChapters?.length || context?.parentPriorityAlert) {
-    prompt += `\n\n--- CONTEXTE ACTUEL (IMPORTANT - adapte tes réponses en conséquence) ---\n`;
-    if (context.subject) {
-      const mentor = getMentorForSubject(context.subject as Subject);
-      prompt += `- Matière: ${context.subject}${mentor ? ` (groupe: ${mentor.group.name})` : ''}\n`;
-      prompt += `- GARDIENS PAR MATIÈRE (si l'élève pose une question hors-sujet, indique-lui le bon gardien) : Maths/Technologie → **Maître des Runes Numériques** ; Français → **Gardien des Glyphes Anciens** ; Histoire-Géo → **Chroniqueur des Civilisations** ; SVT/Physique-Chimie → **Alchimiste des Potions Mayas** ; Anglais/Espagnol → **Traducteur des Langages Perdus** ; Arts/EPS/Musique/Théologie → **Artisan des Créations Sacrées**\n`;
-    }
-    if (context.chapterName) {
-      prompt += `- Chapitre en cours: ${context.chapterName}\n`;
-    }
-    const status = context.chapterStatus ?? context.curriculumChapters?.find((c) => c.chapter_name === context.chapterName)?.status;
-    if (status === 'pas_vu') {
-      prompt += `\nMODE DÉCOUVERTE: Ce chapitre n'a pas encore été vu en classe. Commence par une phase de découverte : introduis les notions clés, explique le contexte, prépare l'exploratrice à ce qu'elle va rencontrer.\n`;
-    } else if (status === 'vu_en_classe') {
-      prompt += `\nMODE RÉVISION: Ce chapitre est déjà vu en classe. Passe en mode révision/exercice : pose des questions, fais faire des exercices, valide la compréhension.\n`;
-    }
-    if (context.curriculumChapters && context.curriculumChapters.length > 0) {
-      prompt += `- Programme de l'élève dans cette matière:\n`;
-      for (const ch of context.curriculumChapters) {
-        const statusLabel = ch.status === 'maitrise' ? '✓ maîtrisé' : ch.status === 'vu_en_classe' ? '... en cours' : '🔒 à venir';
-        prompt += `  • ${ch.chapter_name} (${statusLabel})\n`;
-      }
-      prompt += `\nConcentre-toi sur le chapitre en cours et les notions déjà vues. Référence le programme quand c'est pertinent.\n`;
-    }
-    if (context.bulletinAlert) {
-      prompt += `\n${context.bulletinAlert}\n`;
-    }
-    if (context.planningSlots) {
-      prompt += `\n${context.planningSlots}\n`;
-    }
-    if (context.parentPriorityAlert) {
-      prompt += `\n${context.parentPriorityAlert}\n`;
-    }
-  }
-  return prompt;
-}
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
+  loadingStatus: null,
   currentSessionId: null,
   isTyping: false,
   redirectModalToShow: null,
@@ -202,11 +84,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isTyping: true });
     let fetchTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let safetyTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let loadingIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    // Utilisation de la constante globale LOADING_MESSAGES importée
+    set({ isTyping: true, loadingStatus: LOADING_MESSAGES[0] });
+
+    // Faire tourner les messages toutes les 4s
+    loadingIntervalId = setInterval(() => {
+      set((state) => {
+        const currentIdx = LOADING_MESSAGES.indexOf(state.loadingStatus || '') ?? -1;
+        const nextIdx = (currentIdx + 1) % LOADING_MESSAGES.length;
+        return { loadingStatus: LOADING_MESSAGES[nextIdx] };
+      });
+    }, 4000);
 
     // Timeout de sécurité : si après 2 min on n'a toujours pas de réponse, forcer isTyping=false
     safetyTimeoutId = setTimeout(() => {
       console.error('[ChatStore] SAFETY TIMEOUT: Forcing isTyping=false after 2 minutes');
-      set({ isTyping: false });
+      set({ isTyping: false, loadingStatus: null });
+      if (loadingIntervalId) clearInterval(loadingIntervalId);
+
       get().receiveAIMessage(
         "⚠️ Le mentor ne répond pas. Vérifie ta connexion et réessaie ! 🏕️",
         sessionId
@@ -332,7 +229,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const body = {
         message: content,
-        history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+        history: messages
+          .filter((m) => m.role !== 'system')
+          .slice(-10),
         systemPrompt: systemPrompt + studentMemory,
         studentId,
         classe: classe || null,
@@ -382,6 +281,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const invokeError = !res.ok ? new Error((aiResponse.error as string) || `HTTP ${res.status}`) : null;
 
       console.log('[ChatStore] Edge Function réponse', { ok: res.ok, status: res.status, hasData: !!aiResponse.content, content: typeof aiResponse.content === 'string' ? aiResponse.content.slice(0, 50) : null });
+      console.log('[ChatStore] RAW RESPONSE:', JSON.stringify(aiResponse, null, 2));
 
       if (invokeError) throw invokeError;
       if (aiResponse.error) {
@@ -427,30 +327,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (updateSandbox?.elements?.length) {
         console.log('[ChatStore] updateSandbox reçu', { count: updateSandbox.elements.length, raw: updateSandbox.elements });
         const { useSandboxStore: sb } = await import('./sandboxStore');
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
-        try {
-          const fullElements = convertToExcalidrawElements(updateSandbox.elements as Parameters<typeof convertToExcalidrawElements>[0]);
-          console.log('[ChatStore] convertToExcalidrawElements OK', { count: fullElements.length });
-          sb.getState().addElements(fullElements as unknown[]);
-        } catch (e) {
-          console.warn('[ChatStore] convertToExcalidrawElements échec, utilisation raw', e);
-          sb.getState().addElements(updateSandbox.elements);
-        }
+        sb.getState().addElements(updateSandbox.elements);
       }
 
       // NOUVEAU : On envoie aussi les dessins (draw_schema / Maths) vers le Sandbox
-      if (drawingData && (drawingData as { elements?: unknown[] }).elements) {
-        const dElements = (drawingData as { elements: unknown[] }).elements;
-        console.log('[ChatStore] drawing reçu (Maths) -> envoi au Sandbox', { count: dElements.length });
-        const { useSandboxStore: sb } = await import('./sandboxStore');
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
-        try {
-          // On force un ID unique pour éviter les conflits si le dessin est renvoyé
-          const fullElements = convertToExcalidrawElements(dElements as Parameters<typeof convertToExcalidrawElements>[0]);
-          sb.getState().addElements(fullElements as unknown[]);
-        } catch (e) {
-          console.warn('[ChatStore] convertToExcalidrawElements (drawing) échec', e);
-          sb.getState().addElements(dElements);
+      if (drawingData) {
+        const dData = drawingData as { elements?: unknown[]; clearBefore?: boolean };
+        if (dData.elements && dData.elements.length > 0) {
+          console.log('[ChatStore] drawing reçu (Maths) -> envoi au Sandbox', { count: dData.elements.length, clearBefore: !!dData.clearBefore });
+          const { useSandboxStore: sb } = await import('./sandboxStore');
+
+          if (dData.clearBefore) {
+            sb.getState().resetSandbox();
+          }
+
+          sb.getState().addElements(dData.elements);
         }
       }
       if (missionCompleted && missionReward) {
@@ -550,9 +441,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const errMsg = error instanceof Error ? error.message : String(error);
       const isAbort = error instanceof Error && error.name === 'AbortError';
       console.error('[ChatStore] sendMessage error:', errMsg, { isAbort });
+      const isSessionError = errMsg.includes('Session expirée');
       const fallbackMsg = isAbort
         ? "Le mentor met trop de temps à répondre. Réessaie dans un instant ! 🏕️"
-        : "La liaison avec le campement est instable, réessaye dans un instant, exploratrice. 🏕️";
+        : isSessionError
+          ? "Ta session semble avoir expiré. Essaie de rafraîchir la page si le problème persiste. 🔄"
+          : "La liaison avec le campement est instable, réessaye dans un instant, exploratrice. 🏕️";
+
+      if (isSessionError) {
+        // Force logout state check potentially? For now just visual feedback.
+      }
+
       try {
         await get().receiveAIMessage(fallbackMsg, sessionId);
       } catch (e) {
@@ -561,7 +460,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } finally {
       if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
       if (safetyTimeoutId) clearTimeout(safetyTimeoutId);
-      set({ isTyping: false });
+      if (loadingIntervalId) clearInterval(loadingIntervalId);
+      set({ isTyping: false, loadingStatus: null });
       console.log('[ChatStore] sendMessage finally, isTyping=false');
     }
   },
@@ -615,7 +515,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearChat: () => {
-    set({ messages: [], currentSessionId: null, redirectModalToShow: null });
+    set({ messages: [], currentSessionId: null, redirectModalToShow: null, isTyping: false, loadingStatus: null });
+  },
+
+  resetState: () => {
+    set({ isTyping: false, isLoading: false, loadingStatus: null });
   },
 
   clearRedirectModal: () => {

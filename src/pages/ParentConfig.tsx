@@ -205,7 +205,7 @@ export function ParentConfig() {
       });
       setPrioritySubject('');
       setPriorityNote('');
-    } catch (_) {}
+    } catch (_) { }
     setIsSavingPriority(false);
   };
 
@@ -274,13 +274,12 @@ export function ParentConfig() {
               key={tab.id}
               onClick={() => !disabled && setConfigSubTab(tab.id)}
               disabled={disabled}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all shrink-0 ${
-                configSubTab === tab.id
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : disabled
-                    ? 'text-amber-100/30 cursor-not-allowed'
-                    : 'text-amber-100/70 hover:bg-amber-500/10 hover:text-amber-300'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all shrink-0 ${configSubTab === tab.id
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                : disabled
+                  ? 'text-amber-100/30 cursor-not-allowed'
+                  : 'text-amber-100/70 hover:bg-amber-500/10 hover:text-amber-300'
+                }`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
@@ -291,158 +290,160 @@ export function ParentConfig() {
 
       {/* Onglet Explorateurs */}
       {configSubTab === 'enfants' && (
-      <section className="p-6 stone-card rounded-2xl">
-        <h2 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-amber-400" />
-          Gérer les explorateurs
-        </h2>
+        <section className="p-6 stone-card rounded-2xl">
+          <h2 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
+            <Users className="w-5 h-5 text-amber-400" />
+            Gérer les explorateurs
+          </h2>
 
-        {pendingApprovals.length > 0 && (
-          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <p className="text-amber-100 font-medium mb-3">Demandes en attente</p>
-            {pendingApprovals.map((c) => (
-              <div key={c.id} className="flex items-center justify-between py-2">
-                <span className="text-amber-100/80">{c.full_name} — {c.email}</span>
-                <button
-                  onClick={() => approveChild(c.id).then(loadChildrenData)}
-                  className="px-3 py-1 bg-emerald-500 text-slate-900 font-semibold rounded-lg text-sm"
-                >
-                  Valider
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setAddChildMode('invite')}
-            className={`px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all ${
-              addChildMode === 'invite'
-                ? 'bg-amber-500 text-slate-900'
-                : 'bg-slate-800 text-amber-100/70 hover:bg-slate-700'
-            }`}
-          >
-            <Mail className="w-4 h-4" />
-            Inviter par email
-          </button>
-          <button
-            onClick={() => setAddChildMode('link')}
-            className={`px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all ${
-              addChildMode === 'link'
-                ? 'bg-amber-500 text-slate-900'
-                : 'bg-slate-800 text-amber-100/70 hover:bg-slate-700'
-            }`}
-          >
-            <Link2 className="w-4 h-4" />
-            Rattacher un compte existant
-          </button>
-        </div>
-
-        <form onSubmit={handleAddChild} className="space-y-4">
-          {addChildMode === 'invite' && (
-            <>
-              <input
-                type="text"
-                placeholder="Prénom de l'enfant"
-                value={childName}
-                onChange={(e) => setChildName(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
-              />
-              <div>
-                <label className="block text-amber-100/80 text-sm mb-2">Classe (collège)</label>
-                <StoneSelect
-                  value={childClasse}
-                  onValueChange={setChildClasse}
-                  options={CLASSES.map((c) => ({ value: c, label: c }))}
-                  placeholder="Choisir la classe"
-                  required
-                />
-              </div>
-              <p className="text-amber-100/50 text-xs">
-                L'enfant recevra un email pour créer son mot de passe. En cas d'oubli : mot de passe oublié.
-              </p>
-            </>
-          )}
-          <input
-            type="email"
-            placeholder="Email de l'enfant"
-            value={childEmail}
-            onChange={(e) => setChildEmail(e.target.value)}
-            required
-            className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
-          />
-          {error && (
-            <div className="stone-alert-error">
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={isAddingChild}
-            className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
-          >
-            {isAddingChild ? <LoadingSpinner size="sm" /> : <UserPlus className="w-5 h-5" />}
-            {addChildMode === 'invite' ? 'Envoyer l\'invitation' : 'Rattacher'}
-          </button>
-        </form>
-        {inviteSent && (
-          <div className="mt-4 stone-alert-success">
-            <CheckCircle className="w-4 h-4 shrink-0" />
-            <p className="text-sm">Invitation envoyée.</p>
-          </div>
-        )}
-        {resendSuccess && (
-          <div className="mt-4 stone-alert-success">
-            <CheckCircle className="w-4 h-4 shrink-0" />
-            <p className="text-sm">{resendSuccess}</p>
-          </div>
-        )}
-
-        {children.length > 0 && (
-          <div className="mt-8 pt-6 border-t border-amber-500/20">
-            <h3 className="font-medium text-amber-100 mb-3">Explorateurs liés</h3>
-            <div className="space-y-3">
-              {children.map((child) => (
-                <div
-                  key={child.id}
-                  className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-amber-500/10"
-                >
-                  <div>
-                    <p className="font-medium text-amber-100">{child.full_name || 'Sans nom'}</p>
-                    <p className="text-sm text-amber-100/60">{child.email}</p>
-                  </div>
+          {pendingApprovals.length > 0 && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+              <p className="text-amber-100 font-medium mb-3">Demandes en attente</p>
+              {pendingApprovals.map((c) => (
+                <div key={c.id} className="flex items-center justify-between py-2">
+                  <span className="text-amber-100/80">{c.full_name} — {c.email}</span>
                   <button
-                    type="button"
                     onClick={async () => {
-                      if (!child.email) return;
-                      setResendSuccess(null);
-                      clearError();
-                      setResendingEmail(child.email);
-                      const { email_sent, error: err } = await resendInviteChildAccount(child.email);
-                      setResendingEmail(null);
-                      if (err) return;
-                      if (email_sent) {
-                        setResendSuccess(`Email envoyé à ${child.email} ! ${child.full_name || 'L\'enfant'} recevra un lien pour créer ou réinitialiser son mot de passe.`);
-                        setTimeout(() => setResendSuccess(null), 6000);
-                      }
+                      console.log('Tentative validation:', c.id);
+                      await approveChild(c.id);
+                      loadChildrenData();
                     }}
-                    disabled={resendingEmail !== null}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-50 text-sm font-medium"
+                    className="px-3 py-1 bg-emerald-500 text-slate-900 font-semibold rounded-lg text-sm transition-transform active:scale-95"
                   >
-                    {resendingEmail === child.email ? (
-                      <LoadingSpinner size="sm" />
-                    ) : (
-                      <Reply className="w-4 h-4" />
-                    )}
-                    Renvoyer l'invitation
+                    Valider
                   </button>
                 </div>
               ))}
             </div>
+          )}
+
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setAddChildMode('invite')}
+              className={`px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all ${addChildMode === 'invite'
+                ? 'bg-amber-500 text-slate-900'
+                : 'bg-slate-800 text-amber-100/70 hover:bg-slate-700'
+                }`}
+            >
+              <Mail className="w-4 h-4" />
+              Inviter par email
+            </button>
+            <button
+              onClick={() => setAddChildMode('link')}
+              className={`px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all ${addChildMode === 'link'
+                ? 'bg-amber-500 text-slate-900'
+                : 'bg-slate-800 text-amber-100/70 hover:bg-slate-700'
+                }`}
+            >
+              <Link2 className="w-4 h-4" />
+              Rattacher un compte existant
+            </button>
           </div>
-        )}
-      </section>
+
+          <form onSubmit={handleAddChild} className="space-y-4">
+            {addChildMode === 'invite' && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Prénom de l'enfant"
+                  value={childName}
+                  onChange={(e) => setChildName(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
+                />
+                <div>
+                  <label className="block text-amber-100/80 text-sm mb-2">Classe (collège)</label>
+                  <StoneSelect
+                    value={childClasse}
+                    onValueChange={setChildClasse}
+                    options={CLASSES.map((c) => ({ value: c, label: c }))}
+                    placeholder="Choisir la classe"
+                    required
+                  />
+                </div>
+                <p className="text-amber-100/50 text-xs">
+                  L'enfant recevra un email pour créer son mot de passe. En cas d'oubli : mot de passe oublié.
+                </p>
+              </>
+            )}
+            <input
+              type="email"
+              placeholder="Email de l'enfant"
+              value={childEmail}
+              onChange={(e) => setChildEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100"
+            />
+            {error && (
+              <div className="stone-alert-error">
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={isAddingChild}
+              className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
+            >
+              {isAddingChild ? <LoadingSpinner size="sm" /> : <UserPlus className="w-5 h-5" />}
+              {addChildMode === 'invite' ? 'Envoyer l\'invitation' : 'Rattacher'}
+            </button>
+          </form>
+          {inviteSent && (
+            <div className="mt-4 stone-alert-success">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <p className="text-sm">Invitation envoyée.</p>
+            </div>
+          )}
+          {resendSuccess && (
+            <div className="mt-4 stone-alert-success">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <p className="text-sm">{resendSuccess}</p>
+            </div>
+          )}
+
+          {children.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-amber-500/20">
+              <h3 className="font-medium text-amber-100 mb-3">Explorateurs liés</h3>
+              <div className="space-y-3">
+                {children.map((child) => (
+                  <div
+                    key={child.id}
+                    className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-amber-500/10"
+                  >
+                    <div>
+                      <p className="font-medium text-amber-100">{child.full_name || 'Sans nom'}</p>
+                      <p className="text-sm text-amber-100/60">{child.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!child.email) return;
+                        setResendSuccess(null);
+                        clearError();
+                        setResendingEmail(child.email);
+                        const { email_sent, error: err } = await resendInviteChildAccount(child.email);
+                        setResendingEmail(null);
+                        if (err) return;
+                        if (email_sent) {
+                          setResendSuccess(`Email envoyé à ${child.email} ! ${child.full_name || 'L\'enfant'} recevra un lien pour créer ou réinitialiser son mot de passe.`);
+                          setTimeout(() => setResendSuccess(null), 6000);
+                        }
+                      }}
+                      disabled={resendingEmail !== null}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-50 text-sm font-medium"
+                    >
+                      {resendingEmail === child.email ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <Reply className="w-4 h-4" />
+                      )}
+                      Renvoyer l'invitation
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Onglet Scolarité (Bulletins + Injecteur) */}
@@ -450,22 +451,22 @@ export function ParentConfig() {
         <section className="p-6 stone-card rounded-2xl space-y-8">
           <div>
             <h2 className="font-['Cinzel_Decorative'] text-xl font-bold text-amber-100 mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-400" />
-            Bulletins de notes
-          </h2>
-          <p className="text-amber-100/60 text-sm mb-4">
-            Upload un bulletin : l'IA analyse et crée les matières. L'enfant les voit dans son espace.
-          </p>
-          <div className="space-y-6">
-            <BulletinUploader
-              studentId={selectedChild}
-              onAnalysisComplete={() => setBulletinsRefresh((x) => x + 1)}
-            />
-            <div>
-              <h3 className="font-medium text-amber-100 mb-3">Bulletins de {selectedChildProfile?.full_name || 'l\'enfant'}</h3>
-              <BulletinViewer studentId={selectedChild} refreshTrigger={bulletinsRefresh} />
+              <FileText className="w-5 h-5 text-amber-400" />
+              Bulletins de notes
+            </h2>
+            <p className="text-amber-100/60 text-sm mb-4">
+              Upload un bulletin : l'IA analyse et crée les matières. L'enfant les voit dans son espace.
+            </p>
+            <div className="space-y-6">
+              <BulletinUploader
+                studentId={selectedChild}
+                onAnalysisComplete={() => setBulletinsRefresh((x) => x + 1)}
+              />
+              <div>
+                <h3 className="font-medium text-amber-100 mb-3">Bulletins de {selectedChildProfile?.full_name || 'l\'enfant'}</h3>
+                <BulletinViewer studentId={selectedChild} refreshTrigger={bulletinsRefresh} />
+              </div>
             </div>
-          </div>
           </div>
 
           {/* Injecteur de priorité */}

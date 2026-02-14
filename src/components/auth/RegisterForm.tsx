@@ -19,7 +19,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
   const [classe, setClasse] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  
+
   const { signUp, isLoading, error, clearError } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,9 +64,14 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
           {role === 'enfant' ? 'Demande envoyée !' : 'Compte créé !'}
         </h2>
         <p className="text-amber-100/60 mb-6">
-          {role === 'enfant' 
-            ? 'Ta demande a été enregistrée ! Ton parent doit se connecter à Maya Explorer, aller dans Configuration, et valider ton compte. Tu pourras ensuite te connecter.'
-            : 'Ton compte parent est créé. Tu peux maintenant ajouter tes enfants.'}
+          {role === 'enfant'
+            ? (
+              <div className="space-y-4">
+                <p><strong>🦜 Vérifie ta boîte mail !</strong> Un email de confirmation t'a été envoyé. Tu dois cliquer sur le lien "Confirmer mon email".</p>
+                <p>Ensuite, demande à ton parent de valider ton compte depuis son email ou son tableau de bord.</p>
+              </div>
+            )
+            : 'Ton compte parent est créé. Vérifie tes emails pour confirmer ton adresse, puis tu pourras ajouter tes enfants.'}
         </p>
         <button
           onClick={onToggleMode}
@@ -194,34 +199,34 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
 
         {role === 'enfant' && (
           <>
-          <div>
-            <label className="block text-sm font-medium text-amber-100/80 mb-2">
-              Ma classe
-            </label>
-            <StoneSelect
-              value={classe}
-              onValueChange={setClasse}
-              options={[{ value: '6ème', label: '6ème' }, { value: '5ème', label: '5ème' }, { value: '4ème', label: '4ème' }, { value: '3ème', label: '3ème' }]}
-              placeholder="Choisir ma classe"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-amber-100/80 mb-2">
-              Email d'un parent
-            </label>
-            <input
-              type="email"
-              value={parentEmail}
-              onChange={(e) => setParentEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100 placeholder-amber-100/30 focus:outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 transition-all"
-              placeholder="parent@email.com"
-              required
-            />
-            <p className="mt-1 text-xs text-amber-100/50">
-              Un email sera envoyé pour validation
-            </p>
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-amber-100/80 mb-2">
+                Ma classe
+              </label>
+              <StoneSelect
+                value={classe}
+                onValueChange={setClasse}
+                options={[{ value: '6ème', label: '6ème' }, { value: '5ème', label: '5ème' }, { value: '4ème', label: '4ème' }, { value: '3ème', label: '3ème' }]}
+                placeholder="Choisir ma classe"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-amber-100/80 mb-2">
+                Email d'un parent
+              </label>
+              <input
+                type="email"
+                value={parentEmail}
+                onChange={(e) => setParentEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100 placeholder-amber-100/30 focus:outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 transition-all"
+                placeholder="parent@email.com"
+                required
+              />
+              <p className="mt-1 text-xs text-amber-100/50">
+                Un email sera envoyé pour validation
+              </p>
+            </div>
           </>
         )}
 

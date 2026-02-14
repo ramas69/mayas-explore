@@ -97,8 +97,21 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null); // New ref for container
-  const { messages, isLoading, isTyping, sendMessage, loadMessages, clearChat, redirectModalToShow, clearRedirectModal } = useChatStore();
+  const { messages, isLoading, isTyping, sendMessage, loadMessages, clearChat, redirectModalToShow, clearRedirectModal, loadingStatus, resetState } = useChatStore();
   const { getChaptersBySubject } = useCurriculumStore();
+
+  const [showReset, setShowReset] = useState(false);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (isTyping) {
+      setShowReset(false);
+      timer = setTimeout(() => setShowReset(true), 15000); // 15s sans réponse = bouton reset dispo
+    } else {
+      setShowReset(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isTyping]);
 
   const hasValidSession = sessionId && sessionId !== 'demo-session';
   const showGuardianPicker = !selectedChapter && onSelectGuardian;
@@ -155,7 +168,8 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !imageBase64) || isTyping || !hasValidSession) return;
+    if ((!input.trim() && !imageBase64) || (isTyping && !showReset) || !hasValidSession) return;
+    // Si bouton reset affiché, on peut forcer l'envoi ? Non, mieux vaut reset d'abord.
 
     const message = input.trim() || (imageBase64 ? "J'ai uploadé une photo de mon grimoire/cahier. Peux-tu l'analyser ?" : '');
     setInput('');
@@ -315,7 +329,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
           <ChatMessage key={message.id} message={message} mentorName={mentor?.name} />
         ))}
 
-        {hasValidSession && isTyping && <TypingIndicator />}
+        {hasValidSession && isTyping && <TypingIndicator status={loadingStatus} />}
         <div ref={messagesEndRef} />
       </div>
 
@@ -330,7 +344,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
             </button>
           </div>
         )}
-        <div className="flex gap-2 min-w-0">
+        <div className="flex gap-2 min-w-0 items-end">
           <input
             ref={fileInputRef}
             type="file"
@@ -354,13 +368,24 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
             className="flex-1 min-w-0 px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-900/50 border border-amber-500/20 rounded-xl text-amber-100 placeholder-amber-100/30 focus:outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/20 transition-all text-base"
             disabled={isTyping || !hasValidSession}
           />
-          <button
-            type="submit"
-            disabled={(!input.trim() && !imageBase64) || isTyping || !hasValidSession}
-            className="px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px] min-w-[44px] flex items-center justify-center bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 rounded-xl hover:from-amber-400 hover:to-amber-500 active:from-amber-600 active:to-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-5 h-5" />
-          </button>
+          {showReset ? (
+            <button
+              type="button"
+              onClick={resetState}
+              className="px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px] flex items-center justify-center bg-rose-500/20 border border-rose-500/50 text-rose-300 rounded-xl hover:bg-rose-500/30 transition-all whitespace-nowrap text-sm font-medium animate-fade-in"
+              title="Débloquer la conversation"
+            >
+              Débloquer 🔓
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={(!input.trim() && !imageBase64) || isTyping || !hasValidSession}
+              className="px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px] min-w-[44px] flex items-center justify-center bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 rounded-xl hover:from-amber-400 hover:to-amber-500 active:from-amber-600 active:to-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          )}
         </div>
         <p className="mt-2 text-xs text-amber-100/40 text-center">
           L'Exploratrice utilise la méthode socratique - elle te guidera vers la réponse

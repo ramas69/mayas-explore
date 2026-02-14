@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useCurriculumStore } from '../stores/curriculumStore';
 import { useSandboxStore } from '../stores/sandboxStore';
-import { supabase, startSession, getProfile, calculateDailyUsage, getSessionById, saveCanvasSnapshot } from '../lib/supabase';
+import { supabase, getSessionById, saveCanvasSnapshot } from '../lib/supabase';
+import { useSessionManager } from '../hooks/useSessionManager';
 import type { Subject, Curriculum, Session, SchoolZone } from '../types';
 import { ParticleEffects } from '../components/ParticleEffects';
 import { ChatInterface } from '../components/chat/ChatInterface';
@@ -13,6 +14,7 @@ import { Compass, Map, MessageSquare, Trophy, FileText, Menu, X, Calendar, User,
 import { ProfileEditor } from '../components/profile/ProfileEditor';
 import { ProgrammePage } from '../components/programme/ProgrammePage';
 import { StoneSelect } from '../components/ui/StoneSelect';
+import { GrimoireViewer } from '../components/sandbox/GrimoireViewer';
 
 // Lazy load heavy components
 const JungleMap = lazy(() => import('../components/map/JungleMap').then(module => ({ default: module.JungleMap })));
@@ -21,7 +23,6 @@ const BulletinUploader = lazy(() => import('../components/bulletin/BulletinUploa
 const PlanningViewer = lazy(() => import('../components/planning/PlanningViewer').then(module => ({ default: module.PlanningViewer })));
 const PlanningUploader = lazy(() => import('../components/planning/PlanningUploader').then(module => ({ default: module.PlanningUploader })));
 const TempleViewer = lazy(() => import('../components/temple/TempleViewer').then(module => ({ default: module.TempleViewer })));
-const ExcalidrawSandbox = lazy(() => import('../components/sandbox/ExcalidrawSandbox').then(module => ({ default: module.ExcalidrawSandbox })));
 
 type StudentTab = 'map' | 'chat' | 'temple' | 'bulletin' | 'planning' | 'programme' | 'profil';
 
@@ -43,11 +44,11 @@ export function StudentApp() {
   const activeTab: StudentTab = STUDENT_TABS.includes(tab as StudentTab) ? (tab as StudentTab) : 'map';
   const { user, signOut } = useAuthStore();
   const { loadCurriculum, getChaptersBySubject } = useCurriculumStore();
-  const [selectedChapter, setSelectedChapter] = useState<Curriculum | null>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  /* Refactored with useSessionManager */
+  const { currentSessionId, setCurrentSessionId, selectedChapter, setSelectedChapter, startNewSession } = useSessionManager();
+
+  // Restore State Variables
   const [grimoireSubject, setGrimoireSubject] = useState<Subject | null>(null);
-  const [canvasInitialData, setCanvasInitialData] = useState<{ elements: unknown[]; appState?: Record<string, unknown> } | null>(null);
-  const [canvasForSessionId, setCanvasForSessionId] = useState<string | null>(null);
   const [bulletinRefresh, setBulletinRefresh] = useState(0);
   const [planningRefresh, setPlanningRefresh] = useState(0);
   const [, setStudentZone] = useState<SchoolZone>('C');
@@ -90,130 +91,49 @@ export function StudentApp() {
   };
 
   const resetSandbox = useSandboxStore((s) => s.resetSandbox);
+  const setElements = useSandboxStore((s) => s.setElements);
+  const elements = useSandboxStore((s) => s.elements);
 
   useEffect(() => {
     resetSandbox();
     if (currentSessionId && currentSessionId !== 'demo-session') {
-      setCanvasForSessionId(null);
       getSessionById(currentSessionId).then(({ data }) => {
-        const snap = (data as { canvas_snapshot?: { elements?: unknown[]; appState?: Record<string, unknown> } } | null)?.canvas_snapshot;
-        const payload = snap?.elements?.length ? {
-          elements: snap.elements,
-          appState: {
-            ...snap.appState,
-            viewBackgroundColor: '#0f172a',
-            theme: 'dark'
-          }
-        } : null;
-        setCanvasInitialData(payload);
-        setCanvasForSessionId(currentSessionId);
+        const snap = (data as { canvas_snapshot?: { elements?: any[] } } | null)?.canvas_snapshot;
+        if (snap?.elements) {
+          setElements(snap.elements);
+        }
       });
-    } else {
-      setCanvasInitialData(null);
-      setCanvasForSessionId(null);
     }
-  }, [currentSessionId, resetSandbox]);
+  }, [currentSessionId, resetSandbox, setElements]);
 
-  const initialDataForSession =
-    canvasForSessionId === currentSessionId ? canvasInitialData : null;
+  // Auto-save sandbox elements when they change
+  useEffect(() => {
+    if (!currentSessionId || currentSessionId === 'demo-session') return;
+    const timeout = setTimeout(() => {
+      if (elements.length > 0) {
+        saveCanvasSnapshot(currentSessionId, { elements });
+      }
+    }, 1000);
+    return () => clearTimeout(timeout);
+  }, [elements, currentSessionId]);
 
   const sessionId = currentSessionId ?? 'demo-session';
 
   const handleSelectGuardian = async (subject: Subject) => {
-    console.log('[App] handleSelectGuardian called with:', subject);
-    if (!user?.id) {
-      console.error('[App] No user ID');
-      return;
-    }
+    setMenuOpen(false);
+    const chapters = getChaptersBySubject(subject);
+    // Find first unmastered chapter or default to the subject name
+    const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0];
 
-    try {
-      setMenuOpen(false);
-      // Basculer vers le chat immédiatement pour un retour visuel
-      navigate('/app/chat');
+    // If no chapter found (rare), we just pass the subject name as chapter name
+    const chapterName = chapter?.chapter_name ?? subject;
 
-      console.log('[App] Getting profile...');
-      const { data: profile } = await getProfile(user.id);
-      const limit = (profile as { daily_time_limit?: number } | null)?.daily_time_limit ?? 120;
-
-      console.log('[App] Calculating daily usage...');
-      const dailyUsed = await calculateDailyUsage(user.id);
-      console.log('[App] Daily usage:', { dailyUsed, limit });
-
-      if (dailyUsed >= limit) {
-        alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
-        return;
-      }
-
-      const chapters = getChaptersBySubject(subject);
-      const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0] ?? {
-        id: `guardian-${subject}`,
-        student_id: user.id,
-        subject,
-        chapter_name: subject,
-        source: 'manual' as const,
-        status: 'pas_vu' as const,
-        order_index: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      console.log('[App] Selected chapter:', chapter);
-      console.log('[App] Starting session...');
-      const { data: session, error } = await startSession(user.id, subject, chapter.chapter_name);
-      console.log('[App] startSession result:', { session: !!session, error: error?.message });
-
-      if (error) {
-        console.error('[App] startSession error:', error);
-        alert('Impossible de démarrer la session. Réessaie.');
-        return;
-      }
-
-      if (session) {
-        console.log('[App] Setting currentSessionId:', session.id);
-        setCurrentSessionId(session.id);
-        setSelectedChapter(chapter);
-      }
-    } catch (error) {
-      console.error('[App] handleSelectGuardian error:', error);
-      alert('Une erreur est survenue. Recharge la page et réessaie.');
-    }
+    await startNewSession(subject, chapterName, chapter);
   };
 
   const handleNewChat = async (chapter: Curriculum) => {
-    console.log('[App] handleNewChat called with:', chapter);
-    if (!user?.id) return;
     setMenuOpen(false);
-    // Basculer vers le chat immédiatement pour un retour visuel
-    navigate('/app/chat');
-
-    console.log('[App] handleNewChat: Checking profile limits...');
-    const { data: profile } = await getProfile(user.id);
-    console.log('[App] handleNewChat: Profile fetched', profile);
-
-    const limit = (profile as { daily_time_limit?: number } | null)?.daily_time_limit ?? 120;
-
-    console.log('[App] handleNewChat: Calculating daily usage...');
-    const dailyUsed = await calculateDailyUsage(user.id);
-    console.log('[App] handleNewChat: Daily usage:', dailyUsed, 'Limit:', limit);
-
-    if (dailyUsed >= limit) {
-      alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
-      return;
-    }
-
-    console.log('[App] handleNewChat: Starting session...');
-    const { data: session, error } = await startSession(user.id, chapter.subject, chapter.chapter_name);
-    console.log('[App] startSession (newChat) result:', { session, error });
-    if (error) {
-      console.error('[App] startSession error:', error);
-      alert('Impossible de démarrer la session. Réessaie.');
-      return;
-    }
-    if (session) {
-      console.log('[App] Setting currentSessionId (newChat):', session.id);
-      setCurrentSessionId(session.id);
-      setSelectedChapter(chapter);
-    }
+    await startNewSession(chapter.subject, chapter.chapter_name, chapter);
   };
 
   const handleLoadSession = (session: Session) => {
@@ -253,7 +173,7 @@ export function StudentApp() {
       <ParticleEffects />
 
       {/* Header */}
-      <header className="nav-glass py-3 px-4 sm:py-4 sm:px-6 flex items-center justify-between z-50 shrink-0">
+      <header className="nav-glass py-3 px-4 sm:py-4 sm:px-6 flex items-center justify-between z-[100] shrink-0">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Menu hamburger - mobile uniquement */}
           <button
@@ -277,8 +197,15 @@ export function StudentApp() {
           </span>
           <button
             onClick={async () => {
-              await signOut();
-              navigate('/auth', { replace: true });
+              console.log('[StudentApp] SignOut clicked');
+              try {
+                await signOut();
+                console.log('[StudentApp] SignOut completed, navigating...');
+                navigate('/auth', { replace: true });
+              } catch (e) {
+                console.error('[StudentApp] SignOut error:', e);
+                alert("Erreur lors de la déconnexion");
+              }
             }}
             className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-amber-100/60 hover:text-amber-400 transition-colors"
           >
@@ -378,24 +305,7 @@ export function StudentApp() {
                 />
               </div>
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <Suspense
-                  fallback={
-                    <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-800/50 border border-amber-500/20">
-                      <span className="text-amber-200/70 animate-pulse">Chargement du Grimoire…</span>
-                    </div>
-                  }
-                >
-                  <ExcalidrawSandbox
-                    key={`${sessionId}-${initialDataForSession ? 'ready' : 'loading'}`}
-                    sessionId={sessionId}
-                    initialData={initialDataForSession ?? undefined}
-                    onSaveSnapshot={(snapshot) => {
-                      if (sessionId && sessionId !== 'demo-session') {
-                        saveCanvasSnapshot(sessionId, snapshot);
-                      }
-                    }}
-                  />
-                </Suspense>
+                <GrimoireViewer />
               </div>
             </div>
           )}

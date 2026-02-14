@@ -1,6 +1,8 @@
-// Edge Function: chat
-// Mentor IA avec tools : get_programme_officiel, draw_schema, complete_mission
-// Nécessite OPENAI_API_KEY dans les secrets Supabase
+// Edge Function: chat (v7 — Détection schéma vs photo)
+// Sources images : Wikipédia FR, Wikimedia Commons, Perplexity
+// Routage intelligent : "structure du volcan" → schéma, "volcan" → photo
+// Secrets requis : OPENAI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
+// Secrets optionnels : PERPLEXITY_API_KEY
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -11,6 +13,8 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 function ok(data: unknown) {
   return new Response(JSON.stringify(data), {
@@ -25,7 +29,28 @@ function err(message: string) {
   });
 }
 
-/** fetch avec timeout pour éviter les blocages */
+function safeJsonParse<T = unknown>(raw: string, fallback: T | null = null): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+type PerfLogger = (step: string) => void;
+
+const createPerfLogger = (requestId: string): PerfLogger => {
+  const start = performance.now();
+  let last = start;
+  return (step: string) => {
+    const now = performance.now();
+    const diff = (now - last).toFixed(0);
+    const total = (now - start).toFixed(0);
+    console.log(`[PERF] [${requestId}] ${step} (+${diff}ms | Total: ${total}ms)`);
+    last = now;
+  };
+};
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeoutMs?: number } = {}
@@ -34,939 +59,1002 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-/** 
- * Recherche une image éducative de haute qualité via Perplexity API.
- * Le prompt force l'API à identifier une URL unique et pertinente.
- */
-/** 
- * Vérifie si une URL existe réellement (HEAD request) avec un User-Agent de navigateur.
- */
-async function checkUrlValidity(url: string): Promise<boolean> {
-  // On ne fait PAS confiance aveuglément pour éviter les hallucinations de chemins (404)
+// ─── SLICING INTELLIGENT DE L'HISTORIQUE ─────────────────────────────────────
+
+function safeSliceHistory(history: any[], maxMessages = 10): any[] {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const sliced = history.slice(-maxMessages);
+
+  while (sliced.length > 0 && sliced[0].role === 'tool') {
+    sliced.shift();
+  }
+
+  if (
+    sliced.length > 0 &&
+    sliced[0].role === 'assistant' &&
+    sliced[0].tool_calls?.length > 0
+  ) {
+    const expectedIds = new Set(sliced[0].tool_calls.map((tc: any) => tc.id));
+    const presentIds = new Set(
+      sliced.filter((m: any) => m.role === 'tool').map((m: any) => m.tool_call_id)
+    );
+    if (![...expectedIds].every((id) => presentIds.has(id))) {
+      sliced.shift();
+      while (sliced.length > 0 && sliced[0].role === 'tool') sliced.shift();
+    }
+  }
+  return sliced;
+}
+
+// ─── DÉTECTION TYPE D'IMAGE : SCHÉMA vs PHOTO ──────────────────────────────
+// "structure d'un volcan" → SCHÉMA (coupe transversale, diagramme)
+// "volcan" → PHOTO (image Wikipédia)
+// "Napoléon Bonaparte" → PHOTO (portrait)
+// "anatomie du cœur" → SCHÉMA (coupe avec légendes)
+
+type ImageType = 'schema' | 'photo';
+
+const SCHEMA_KEYWORDS = [
+  'structure', 'schéma', 'schema', 'anatomie', 'coupe', 'fonctionnement',
+  'cycle', 'diagramme', 'mécanisme', 'étapes', 'processus', 'composition',
+  'organisation', 'parties', 'éléments', 'couches', 'système',
+  'circuit', 'chaîne', 'trajet', 'parcours',
+  // Mots implicites de schéma
+  'comment fonctionne', 'comment marche', 'expliquer le',
+  'intérieur', 'interne', 'en coupe', 'transversale',
+];
+
+function detectImageType(topic: string): ImageType {
+  const lower = topic.toLowerCase();
+  for (const kw of SCHEMA_KEYWORDS) {
+    if (lower.includes(kw)) return 'schema';
+  }
+  return 'photo';
+}
+
+// Extrait le sujet principal sans les mots-clés de type
+// "structure d'un volcan" → "volcan"
+// "anatomie du cœur humain" → "cœur humain"
+function extractSubject(topic: string): string {
+  let subject = topic.toLowerCase();
+  // Retirer les mots-clés de type
+  const removeWords = [
+    'structure de ', "structure d'un ", "structure d'une ", 'structure du ', 'structure des ',
+    'schéma de ', "schéma d'un ", "schéma d'une ", 'schéma du ', 'schéma des ',
+    'anatomie de ', "anatomie d'un ", "anatomie d'une ", 'anatomie du ', 'anatomie des ',
+    'coupe de ', "coupe d'un ", "coupe d'une ", 'coupe du ', 'coupe des ',
+    'fonctionnement de ', "fonctionnement d'un ", "fonctionnement d'une ", 'fonctionnement du ', 'fonctionnement des ',
+    'cycle de ', "cycle d'un ", "cycle d'une ", 'cycle du ', 'cycle des ',
+    'diagramme de ', "diagramme d'un ", "diagramme d'une ", 'diagramme du ', 'diagramme des ',
+    'composition de ', "composition d'un ", "composition d'une ", 'composition du ', 'composition des ',
+    'parties de ', "parties d'un ", "parties d'une ", 'parties du ', 'parties des ',
+    'circuit ', 'système ', 'mécanisme du ', "mécanisme d'un ",
+    'les étapes de ', "les étapes d'un ", 'les étapes du ',
+    'le trajet de ', "le trajet d'un ", 'le trajet du ',
+    'en coupe', 'transversale',
+  ];
+  for (const w of removeWords) {
+    if (subject.startsWith(w)) {
+      subject = subject.slice(w.length).trim();
+      break;
+    }
+  }
+  // Capitaliser la première lettre
+  return subject.charAt(0).toUpperCase() + subject.slice(1);
+}
+
+// ─── TRADUCTION FR → EN ─────────────────────────────────────────────────────
+
+const FR_EN_COMMON: Record<string, string> = {
+  'coeur': 'heart', 'cœur': 'heart', 'poumon': 'lung', 'cerveau': 'brain',
+  'squelette': 'skeleton', 'muscle': 'muscle', 'cellule': 'cell', 'oeil': 'eye',
+  'estomac': 'stomach', 'intestin': 'intestine', 'rein': 'kidney', 'foie': 'liver',
+  'système solaire': 'solar system', 'terre': 'earth', 'lune': 'moon', 'soleil': 'sun',
+  'volcan': 'volcano', 'séisme': 'earthquake', 'tsunami': 'tsunami',
+  'cycle eau': 'water cycle', "cycle de l'eau": 'water cycle', "l'eau": 'water cycle',
+  'photosynthèse': 'photosynthesis', 'respiration': 'respiration',
+  'digestion': 'digestion', 'circulation sanguine': 'blood circulation',
+  'système nerveux': 'nervous system', 'système digestif': 'digestive system',
+  'révolution française': 'french revolution', 'empire romain': 'roman empire',
+  'napoléon': 'napoleon', 'napoleon': 'napoleon',
+  'pyramide': 'pyramid', 'château fort': 'medieval castle',
+  'première guerre mondiale': 'world war 1', 'seconde guerre mondiale': 'world war 2',
+  'moyen âge': 'middle ages', 'moyen age': 'middle ages',
+  'atome': 'atom', 'molécule': 'molecule', 'électricité': 'electricity',
+  'circuit électrique': 'electric circuit', 'force': 'force', 'énergie': 'energy',
+  'triangle': 'triangle', 'cercle': 'circle', 'rectangle': 'rectangle',
+  'théorème de pythagore': 'pythagorean theorem', 'thalès': 'thales theorem',
+  'carte de france': 'map of france', 'continent': 'continent',
+  'climat': 'climate', 'océan': 'ocean', 'montagne': 'mountain',
+  'fleuve': 'river', 'désert': 'desert',
+  'renaissance': 'renaissance', 'antiquité': 'antiquity',
+  'préhistoire': 'prehistory', 'grèce antique': 'ancient greece',
+  'rome antique': 'ancient rome', 'égypte antique': 'ancient egypt',
+  'cœur humain': 'human heart', 'coeur humain': 'human heart',
+  'corps humain': 'human body', 'appareil digestif': 'digestive system',
+  'appareil respiratoire': 'respiratory system',
+};
+
+function translateToEnglish(frTopic: string): string {
+  const lower = frTopic.toLowerCase().trim();
+  if (FR_EN_COMMON[lower]) return FR_EN_COMMON[lower];
+  for (const [fr, en] of Object.entries(FR_EN_COMMON)) {
+    if (lower.includes(fr)) return lower.replace(fr, en);
+  }
+  return frTopic;
+}
+
+// ─── SOURCE : WIKIPÉDIA FR (image principale article) ──────────────────────
+
+async function searchWikipediaFR(
+  topic: string,
+  logPerf: PerfLogger
+): Promise<string | null> {
   try {
-    const res = await fetchWithTimeout(url, {
-      method: 'HEAD',
-      timeoutMs: 4000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+    logPerf('WikipédiaFR: Start');
+    const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=3&format=json&origin=*`;
+    const searchRes = await fetchWithTimeout(searchUrl, { timeoutMs: 5000 });
+    if (!searchRes.ok) return null;
+
+    const searchJson = await searchRes.json();
+    const results = searchJson?.query?.search;
+    if (!results || results.length === 0) return null;
+
+    for (const result of results) {
+      const imageUrl = await _getWikipediaImage(result.title);
+      if (imageUrl) {
+        logPerf(`WikipédiaFR: Found for "${result.title}"`);
+        return imageUrl;
       }
-    });
-    // On accepte 200 OK et les Content-Type images
-    const type = res.headers.get('content-type') || '';
-    return res.ok && (type.startsWith('image') || type.includes('application/octet-stream') || url.match(/\.(jpg|jpeg|png|webp|svg)$/i) !== null);
-  } catch {
-    return false;
+    }
+    return null;
+  } catch (e: any) {
+    console.error('[WikipédiaFR]', e?.message);
+    return null;
   }
 }
 
-/** 
- * Tente de convertir une URL SVG Wikimedia en PNG 800px via Special:FilePath.
- */
-function optimiserUrlWikimedia(url: string): string {
-  if (url.match(/\.svg$/i) && (url.includes('wikimedia.org') || url.includes('wikipedia.org'))) {
-    const filename = url.split('/').pop();
-    if (filename) {
-      // Force le rendu PNG 800px via l'outil spécial de Commons
-      return `https://commons.wikimedia.org/wiki/Special:FilePath/${filename}?width=800`;
+async function _getWikipediaImage(title: string): Promise<string | null> {
+  try {
+    const url = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    const res = await fetchWithTimeout(url, { timeoutMs: 4000 });
+    if (!res.ok) return null;
+    const json = await res.json();
+
+    if (json.originalimage?.source && _isGoodImage(json.originalimage.source)) {
+      return _optimizeWikiUrl(json.originalimage.source);
     }
+    if (json.thumbnail?.source && _isGoodImage(json.thumbnail.source)) {
+      return _optimizeWikiUrl(json.thumbnail.source);
+    }
+    return null;
+  } catch { return null; }
+}
+
+function _isGoodImage(url: string): boolean {
+  const lower = url.toLowerCase();
+  const bad = ['icon', 'pictogram', 'logo', 'flag_of_', 'coat_of_arms', 'disambig', 'edit-clear', 'question_book', 'wiki_letter', 'padlock', 'ambox', 'info_sign', 'symbol_', 'stub', '.svg'];
+  return !bad.some(b => lower.includes(b));
+}
+
+function _optimizeWikiUrl(url: string): string {
+  if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) {
+    try {
+      const decoded = decodeURIComponent(url);
+      let filename = '';
+      if (decoded.includes('/thumb/')) {
+        const parts = decoded.split('/');
+        if (parts.length >= 2) filename = parts[parts.length - 2];
+      } else {
+        filename = decoded.split('/').pop() || '';
+      }
+      if (filename && !filename.includes('/') && !filename.endsWith('.svg')) {
+        return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=800`;
+      }
+    } catch { /* ignore */ }
   }
   return url;
 }
 
-/** 
- * Recherche une image via Perplexity en demandant un format Markdown Galerie.
- * Stratégie : Forcer le modèle à générer des liens d'images explicites trouvés dans sa recherche.
- */
-async function searchPerplexityImage(topic: string, classe: string | null): Promise<string | null> {
-  const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
-  if (!apiKey) return null;
+// ─── SOURCE : WIKIMEDIA COMMONS ─────────────────────────────────────────────
 
-  const level = classe || 'collège';
-  const prompt = `Create a markdown image gallery with 3 high-quality educational images (diagrams, maps, historical photos, artworks, charts) of "${topic}" (${level} level).
-  Source ONLY from reliable public educational sites (Wikimedia, OpenStax, Flickr Commons, Library of Congress).
-  Format: ![Alt Text](https://exact-url-to-image.jpg)
-  Do not explain. Just the markdown. If you find a page, extract the main image URL.
-  Example: ![Heart](https://upload.wikimedia.org/wikipedia/commons/e/e5/Diagram_heart.png)`;
+async function searchWikimediaCommons(
+  query: string,
+  logPerf: PerfLogger
+): Promise<string | null> {
+  logPerf('Wikimedia: Start');
 
-  try {
-    const res = await fetchWithTimeout('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar-pro',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-      }),
-      timeoutMs: 30000,
-    });
+  // Essayer la requête directe
+  const result = await _wikimediaSearch(query);
+  if (result) { logPerf('Wikimedia: Found direct'); return result; }
 
-    if (!res.ok) {
-      console.error('[Perplexity] API Error:', res.status, await res.text());
-      return null;
-    }
-
-    const json = await res.json();
-    const content = json.choices?.[0]?.message?.content || '';
-    console.log('[Perplexity] Response:', content);
-
-    // Extraction des URLs Markdown ![...](URL)
-    const markdownRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
-    const matches = [...content.matchAll(markdownRegex)];
-    let candidates = matches.map(m => m[1]);
-
-    // Fallback: Tentative regex raw URL si pas de markdown
-    if (candidates.length === 0) {
-      const rawMatches = content.match(/https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|svg|webp)/gi);
-      if (rawMatches) candidates.push(...rawMatches);
-    }
-
-    // Nettoyage : retirer les [1], [2] de fin d'URL et doublons
-    candidates = candidates.map(url => url.replace(/\[\d+\]$/, ''));
-    candidates = [...new Set(candidates)]; // Dedup
-
-    console.log('[Perplexity] Candidates:', candidates.length);
-
-    // Validation
-    for (let url of candidates) {
-      // Optimisation Wikimedia SVG -> PNG
-      url = optimiserUrlWikimedia(url);
-
-      if (await checkUrlValidity(url)) {
-        console.log('[Perplexity] Valid Image URL:', url);
-        return url;
-      } else {
-        console.log('[Perplexity] Invalid/Blocked URL:', url);
-      }
-    }
-
-    console.log('[Perplexity] No valid image found.');
-    return null;
-
-  } catch (err) {
-    console.error('[Perplexity] Error:', err);
-    return null;
+  // Fallback EN
+  const enQuery = translateToEnglish(query);
+  if (enQuery !== query) {
+    const enResult = await _wikimediaSearch(enQuery);
+    if (enResult) { logPerf('Wikimedia: Found EN'); return enResult; }
   }
+
+  logPerf('Wikimedia: Nothing');
+  return null;
 }
 
-/** 
- * Recherche de secours si Perplexity échoue (ce qui arrive souvent pour les URLs directes).
- * Utilise l'API Wikimedia Commons pour trouver une image fiable.
- */
-async function fallbackImageSearch(topic: string): Promise<string | null> {
-  const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(topic)}&gsrlimit=3&prop=imageinfo&iiprop=url&format=json&origin=*`;
+async function _wikimediaSearch(query: string): Promise<string | null> {
+  const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=5&prop=imageinfo&iiprop=url|size&format=json&origin=*`;
   try {
-    console.log('[Fallback] Searching Wikimedia API for:', topic);
     const res = await fetchWithTimeout(searchUrl, { timeoutMs: 5000 });
     const json = await res.json();
     const pages = json?.query?.pages;
     if (!pages) return null;
 
-    const candidates = Object.values(pages) as { imageinfo?: { 0?: { url?: string } } }[];
-    for (const page of candidates) {
-      const url = page?.imageinfo?.[0]?.url;
-      if (url && (url.endsWith('.jpg') || url.endsWith('.png') || url.endsWith('.svg'))) {
-        return optimiserUrlWikimedia(url);
+    for (const page of Object.values(pages) as any[]) {
+      const info = page?.imageinfo?.[0];
+      if (!info?.url) continue;
+      const w = info.width || 0, h = info.height || 0;
+      if (w < 200 || h < 150) continue;
+      if (/\.(jpg|jpeg|png)$/i.test(info.url) && _isGoodImage(info.url)) {
+        return _optimizeWikiUrl(info.url);
       }
     }
     return null;
+  } catch { return null; }
+}
+
+// ─── SOURCE : PERPLEXITY ────────────────────────────────────────────────────
+
+async function searchPerplexityImage(
+  topic: string,
+  imageType: ImageType,
+  classe: string | null,
+  logPerf: PerfLogger
+): Promise<string | null> {
+  const apiKey = Deno.env.get('PERPLEXITY_API_KEY');
+  if (!apiKey) return null;
+
+  const level = classe || 'collège';
+
+  // Adapter le prompt selon le type d'image voulu
+  const typeInstruction = imageType === 'schema'
+    ? `IMPORTANT : Je cherche un SCHÉMA ÉDUCATIF, un DIAGRAMME ou une COUPE TRANSVERSALE, PAS une photo.
+Priorité : schéma annoté avec légendes, coupe transversale, diagramme avec flèches et labels.`
+    : `Je cherche une IMAGE ou PHOTO claire et pédagogique.`;
+
+  const prompt = `Trouve 3 images pédagogiques pour "${topic}" pour un élève de ${level}.
+
+${typeInstruction}
+
+Sources prioritaires : Wikimedia Commons, sites éducatifs français (.fr), manuels scolaires.
+ÉVITE : photos stock, watermarks, schémas universitaires complexes.
+
+Format : ![Description](https://url-exacte-image.jpg)
+Juste les liens.`;
+
+  try {
+    logPerf('Perplexity: Start');
+    const res = await fetchWithTimeout('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+      }),
+      timeoutMs: 20000,
+    });
+    logPerf('Perplexity: End');
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content || '';
+
+    const mdRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+    let candidates = [...content.matchAll(mdRegex)].map((m: any) => m[1]);
+    if (candidates.length === 0) {
+      const raw = content.match(/https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|svg|webp)/gi);
+      if (raw) candidates.push(...raw);
+    }
+    candidates = [...new Set(candidates.map((u: string) => u.replace(/\[\d+\]$/, '')))];
+
+    for (let url of candidates) {
+      url = _optimizeWikiUrl(url);
+      if (await _checkUrlValidity(url)) return url;
+    }
+    return null;
   } catch (e) {
-    console.error('[Fallback] Error:', e);
+    console.error('[Perplexity]', e);
     return null;
   }
 }
 
-/** 
- * Orchestrateur Perplexity + Vision.
- */
-async function searchAndAnalyzeImage(topic: string, classe: string | null, openaiKey: string): Promise<{ url: string | null, analysis: string }> {
-  // 1. Essai Perplexity (IA)
-  let url = await searchPerplexityImage(topic, classe);
+async function _checkUrlValidity(url: string): Promise<boolean> {
+  if (url.includes('upload.wikimedia.org') || url.includes('commons.wikimedia.org')) return true;
+  try {
+    const res = await fetchWithTimeout(url, {
+      method: 'HEAD', timeoutMs: 4000,
+      headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'image/*,*/*;q=0.8' },
+    });
+    const type = res.headers.get('content-type') || '';
+    return res.ok && (type.startsWith('image') || !!url.match(/\.(jpg|jpeg|png|webp)$/i));
+  } catch {
+    return !!url.match(/\.(jpg|jpeg|png|webp)$/i);
+  }
+}
 
-  // 2. Fallback si Perplexity échoue (API Directe)
-  if (!url) {
-    console.log('[Note] Perplexity a échoué pas grave, passage au mode secours (API WikimediaDirect).');
-    url = await fallbackImageSearch(topic);
+// ─── ORCHESTRATEUR IMAGE (ROUTAGE INTELLIGENT) ─────────────────────────────
+//
+// SCHÉMA demandé ("structure du volcan", "anatomie du cœur") :
+//   1. Wikimedia Commons FR → "volcan coupe transversale schéma"
+//   2. Wikimedia Commons EN → "volcano cross section diagram"
+//   3. Perplexity (mode schéma)
+//
+// PHOTO demandée ("Napoléon", "volcan") :
+//   1. Wikipédia FR (image principale article)
+//   2. Wikimedia Commons FR/EN
+//   3. Perplexity (mode photo)
+
+async function searchAndAnalyzeImage(
+  topic: string,
+  classe: string | null,
+  openaiKey: string,
+  logPerf: PerfLogger
+): Promise<{ url: string | null; analysis: string }> {
+
+  const imageType = detectImageType(topic);
+  const subject = extractSubject(topic);
+  const enSubject = translateToEnglish(subject);
+
+  console.log(`[Image] Type: ${imageType} | Topic: "${topic}" | Subject: "${subject}" | EN: "${enSubject}"`);
+
+  let url: string | null = null;
+
+  if (imageType === 'schema') {
+    // ── SCHÉMA : Wikimedia Commons d'abord avec mots-clés "diagram" ──
+
+    // 1. Wikimedia Commons FR avec mots-clés schéma
+    const schemaQueriesFR = [
+      `${subject} schéma`,
+      `${subject} coupe transversale`,
+      `${subject} diagramme`,
+      subject,
+    ];
+    for (const q of schemaQueriesFR) {
+      console.log(`[Image] Schema FR: "${q}"`);
+      url = await searchWikimediaCommons(q, logPerf);
+      if (url) break;
+    }
+
+    // 2. Wikimedia Commons EN avec mots-clés diagram
+    if (!url) {
+      const schemaQueriesEN = [
+        `${enSubject} diagram`,
+        `${enSubject} cross section`,
+        `${enSubject} anatomy`,
+        `${enSubject} structure`,
+      ];
+      for (const q of schemaQueriesEN) {
+        console.log(`[Image] Schema EN: "${q}"`);
+        url = await _wikimediaSearch(q);
+        if (url) { url = _optimizeWikiUrl(url); break; }
+      }
+    }
+
+    // 3. Perplexity mode schéma
+    if (!url) {
+      console.log('[Image] Perplexity (schema)...');
+      url = await searchPerplexityImage(topic, 'schema', classe, logPerf);
+    }
+
+  } else {
+    // ── PHOTO : Wikipédia FR d'abord ──
+
+    // 1. Wikipédia FR
+    console.log(`[Image] Photo WikipédiaFR: "${subject}"`);
+    url = await searchWikipediaFR(subject, logPerf);
+
+    // 2. Wikimedia Commons FR/EN
+    if (!url) {
+      console.log(`[Image] Photo Wikimedia: "${subject}"`);
+      url = await searchWikimediaCommons(subject, logPerf);
+    }
+
+    // 3. Perplexity mode photo
+    if (!url) {
+      console.log('[Image] Perplexity (photo)...');
+      url = await searchPerplexityImage(topic, 'photo', classe, logPerf);
+    }
   }
 
   if (!url) {
-    return { url: null, analysis: "Le Gardien n'a pas pu visualiser cet artefact (image illisible ou introuvable)." };
+    console.warn('[Image] AUCUNE IMAGE pour:', topic);
+    return {
+      url: null,
+      analysis: "Aucune image trouvée. Décris le concept simplement et propose à l'élève de dessiner.",
+    };
   }
 
+  console.log(`[Image] ✅ ${imageType}:`, url.slice(0, 100));
+
+  logPerf('Vision: Start');
   const analysis = await analyzeImageWithVision(url, openaiKey, classe);
+  logPerf('Vision: End');
   return { url, analysis };
 }
 
-/** 
- * Analyse une image via GPT-4o Vision pour identifier un détail pédagogique.
- * Renvoie une description qui servira de base à la question socratique.
- */
-async function analyzeImageWithVision(imageUrl: string, openaiKey: string, classe: string | null): Promise<string> {
+// ─── VISION ─────────────────────────────────────────────────────────────────
+
+async function analyzeImageWithVision(
+  imageUrl: string,
+  openaiKey: string,
+  classe: string | null
+): Promise<string> {
   const level = classe || 'collège';
-  const prompt = `Tu es le Gardien du savoir. Analyse les détails visuels de ce document (carte, oeuvre, schéma, photo) pour un élève de niveau ${level}. Identifie un élément spécifique (une couleur, une flèche, une légende, un personnage, un lieu, une date, un symbole) que l'élève peut observer. Décris-le brièvement pour que je puisse poser une question dessus.`;
+  const prompt = `Tu es le Gardien du savoir. Analyse cette image pour un élève français de ${level}.
+
+CONSIGNES :
+1. Identifie 2-3 éléments visuels PRÉCIS (couleur, forme, légende, symbole, flèche, zone).
+2. Décris en FRANÇAIS avec des termes simples adaptés au ${level}.
+3. Suggère un détail précis pour une question socratique.
+4. Si du texte est en anglais, traduis-le.
+
+3-4 phrases max.`;
 
   try {
     const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
-            ],
-          },
-        ],
-        max_tokens: 150,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
+          ],
+        }],
+        max_tokens: 250,
       }),
-      timeoutMs: 25000,
+      timeoutMs: 20000,
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('[Vision] API Error:', res.status, errText);
-      // Fallback: Si erreur Vision, on renvoie une phrase générique pour ne pas bloquer
-      return "Je vois l'image mais l'analyse détaillée est momentanément indisponible. Que remarques-tu ?";
-    }
-
+    if (!res.ok) return "Image affichée. Que remarques-tu ?";
     const json = await res.json();
-    if (!json.choices?.[0]?.message?.content) {
-      console.error('[Vision] Empty response:', JSON.stringify(json));
-      return "Analyse visuelle impossible (réponse vide).";
-    }
-    return json.choices[0].message.content;
-  } catch (err) {
-    console.error('[Vision] Erreur Exception:', err);
-    return "Je n'ai pas pu analyser l'image en détail, mais observons-la ensemble.";
+    return json.choices?.[0]?.message?.content || "Observe bien. Que vois-tu ?";
+  } catch {
+    return "Observons cette image ensemble. Que remarques-tu ?";
   }
 }
 
-/** Cycles selon la classe : 6ème = Cycle 3, 5ème-3ème = Cycle 4 */
+// ─── PROGRAMME OFFICIEL ─────────────────────────────────────────────────────
+
 function getCyclesForClasse(classe: string | null): ('Cycle 3' | 'Cycle 4')[] {
   if (!classe) return ['Cycle 3', 'Cycle 4'];
   if (classe === '6ème') return ['Cycle 3'];
   return ['Cycle 4'];
 }
 
-/** Récupère le programme officiel depuis l'API Éducation nationale */
 async function fetchProgrammeOfficiel(cycles: ('Cycle 3' | 'Cycle 4')[]): Promise<string> {
   const allRecords: { descriptif: string; discipline: string; niveau: string }[] = [];
-
   try {
     for (const cycle of cycles) {
-      const params = new URLSearchParams({
-        where: `niveau_d_enseignement = "${cycle}"`,
-        limit: '30',
-      });
-      const res = await fetchWithTimeout(
-        `${API_PROGRAMMES_EDUCATION}?${params}`,
-        { timeoutMs: 15000 }
-      );
+      const params = new URLSearchParams({ where: `niveau_d_enseignement = "${cycle}"`, limit: '30' });
+      const res = await fetchWithTimeout(`${API_PROGRAMMES_EDUCATION}?${params}`, { timeoutMs: 15000 });
       const json = await res.json();
       if (json.results && Array.isArray(json.results)) {
         for (const r of json.results) {
-          const descriptif = (r.descriptif || '').slice(0, 800);
           allRecords.push({
-            descriptif,
+            descriptif: (r.descriptif || '').slice(0, 800),
             discipline: r.discipline ?? '-',
             niveau: r.niveau_d_enseignement ?? cycle,
           });
         }
       }
     }
-
-    if (allRecords.length === 0) {
-      return 'Aucun programme trouvé. Vérifie la classe de l\'élève (6ème, 5ème, 4ème, 3ème).';
-    }
-
-    const grouped = allRecords.reduce(
-      (acc, r) => {
-        const key = `${r.niveau} - ${r.discipline}`;
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(r.descriptif);
-        return acc;
-      },
-      {} as Record<string, string[]>
-    );
-
-    let out = '📚 Programme officiel (Éducation nationale) :\n\n';
+    if (allRecords.length === 0) return 'Aucun programme trouvé.';
+    const grouped = allRecords.reduce((acc, r) => {
+      const key = `${r.niveau} - ${r.discipline}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(r.descriptif);
+      return acc;
+    }, {} as Record<string, string[]>);
+    let out = '📚 Programme officiel :\n\n';
     for (const [key, descs] of Object.entries(grouped)) {
       out += `### ${key}\n${descs.join('\n\n')}\n\n`;
     }
     return out;
-  } catch (e) {
-    console.log('[get_programme_officiel] Erreur API:', e);
-    return "Impossible de récupérer le programme pour l'instant. Réessaie plus tard ou consulte l'onglet Programme ! 📚";
+  } catch {
+    return "Impossible de récupérer le programme.";
   }
 }
 
-/** Génère des éléments Excalidraw pour des formes mathématiques simples */
-function generateMathShape(shape: string): { elements: unknown[]; appState?: Record<string, unknown> } | null {
-  const S = { strokeColor: '#e2e8f0', strokeWidth: 2, roughness: 1, backgroundColor: 'transparent' };
-  const T = { fontSize: 20, strokeColor: '#ef4444' };
-  const center = { x: 400, y: 300 };
+// ─── SVG SHAPES ─────────────────────────────────────────────────────────────
 
-  switch (shape.toLowerCase()) {
+function generateSvgShape(shape: string): { type: string;[k: string]: any }[] {
+  const color = '#fbbf24';
+  const sw = 2;
+  switch (shape) {
     case 'triangle':
-    case 'triangle rectangle':
-      return {
-        elements: [
-          { type: 'line', x: 300, y: 300, points: [[0, 0], [200, 0], [0, -150], [0, 0]], ...S },
-          { type: 'text', x: 290, y: 310, text: 'A', ...T },
-          { type: 'text', x: 510, y: 310, text: 'B', ...T },
-          { type: 'text', x: 290, y: 130, text: 'C', ...T },
-        ],
-      };
+      return [
+        { type: 'line', x1: 200, y1: 50, x2: 100, y2: 250, strokeColor: color, strokeWidth: sw },
+        { type: 'line', x1: 100, y1: 250, x2: 300, y2: 250, strokeColor: color, strokeWidth: sw },
+        { type: 'line', x1: 300, y1: 250, x2: 200, y2: 50, strokeColor: color, strokeWidth: sw },
+        { type: 'text', x: 190, y: 260, text: 'Base', strokeColor: color },
+      ];
     case 'square':
-    case 'carré':
-      return {
-        elements: [
-          { type: 'rectangle', x: 300, y: 200, width: 200, height: 200, ...S },
-          { type: 'text', x: 390, y: 410, text: 'côté', ...T },
-        ],
-      };
-    case 'circle':
-    case 'cercle':
-      return {
-        elements: [
-          { type: 'ellipse', x: 300, y: 200, width: 200, height: 200, ...S },
-          { type: 'line', x: 400, y: 300, points: [[0, 0], [100, 0]], ...S },
-          { type: 'text', x: 440, y: 280, text: 'r', ...T },
-        ],
-      };
-    case 'pythagore':
-      return {
-        elements: [
-          { type: 'line', x: 300, y: 300, points: [[0, 0], [200, 0], [0, -150], [0, 0]], ...S },
-          { type: 'text', x: 380, y: 310, text: 'a', ...T },
-          { type: 'text', x: 270, y: 220, text: 'b', ...T },
-          { type: 'text', x: 410, y: 210, text: 'c (hypoténuse)', ...T },
-        ],
-      };
-    case 'thales':
-    case 'thalès':
-      return {
-        elements: [
-          { type: 'line', x: 300, y: 100, points: [[0, 0], [-100, 200]], ...S },
-          { type: 'line', x: 300, y: 100, points: [[0, 0], [100, 200]], ...S },
-          { type: 'line', x: 250, y: 200, points: [[0, 0], [100, 0]], strokeColor: '#ef4444', strokeWidth: 2 },
-          { type: 'line', x: 200, y: 300, points: [[0, 0], [200, 0]], strokeColor: '#ef4444', strokeWidth: 2 },
-          { type: 'text', x: 290, y: 80, text: 'A', ...T },
-          { type: 'text', x: 180, y: 310, text: 'B', ...T },
-          { type: 'text', x: 410, y: 310, text: 'C', ...T },
-        ],
-      };
+      return [{ type: 'rect', x: 100, y: 50, width: 200, height: 200, strokeColor: color, strokeWidth: sw }];
     case 'rectangle':
-      return {
-        elements: [
-          { type: 'rectangle', x: 300, y: 200, width: 300, height: 150, ...S },
-          { type: 'text', x: 400, y: 360, text: 'L', ...T },
-          { type: 'text', x: 610, y: 280, text: 'l', ...T },
-        ],
-      };
+      return [{ type: 'rect', x: 50, y: 100, width: 300, height: 100, strokeColor: color, strokeWidth: sw }];
+    case 'circle':
+      return [{ type: 'circle', x: 100, y: 50, width: 200, height: 200, strokeColor: color, strokeWidth: sw }];
     default:
-      return null;
+      return [];
   }
 }
+
+// ─── TOOLS DEFINITION ───────────────────────────────────────────────────────
+
+const TOOLS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_programme_officiel',
+      description: "Récupère le programme officiel de l'Éducation nationale.",
+      parameters: {
+        type: 'object',
+        properties: {
+          cycle_hint: { type: 'string', enum: ['Cycle 3', 'Cycle 4', 'les deux'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'draw_schema',
+      description: 'Dessine une figure géométrique simple. UNIQUEMENT : triangle, carré, rectangle, cercle.',
+      parameters: {
+        type: 'object',
+        required: ['shape'],
+        properties: {
+          shape: { type: 'string', enum: ['triangle', 'square', 'rectangle', 'circle'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'display_schema',
+      description:
+        "Affiche une image éducative dans le Grimoire. APPELLE dès qu'un concept visuel est abordé. Si l'élève veut comprendre la structure/fonctionnement, inclus le mot 'structure' ou 'anatomie' dans le topic. Si c'est juste pour voir à quoi ça ressemble, donne juste le nom.",
+      parameters: {
+        type: 'object',
+        required: ['topic'],
+        properties: {
+          topic: {
+            type: 'string',
+            description:
+              `Terme en FRANÇAIS, 2-5 mots. IMPORTANT :
+- Pour un SCHÉMA/DIAGRAMME, commence par "structure", "anatomie", "cycle", "fonctionnement" : "structure d'un volcan", "anatomie du cœur humain", "cycle de l'eau", "fonctionnement d'un circuit électrique"
+- Pour une PHOTO/IMAGE, donne juste le nom : "Napoléon Bonaparte", "Mont Blanc", "Pyramide de Khéops", "Cellule animale"`,
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_sandbox',
+      description: "Annotations (flèches + texte) sur l'image affichée. APRÈS display_schema.",
+      parameters: {
+        type: 'object',
+        required: ['elements'],
+        properties: {
+          elements: {
+            type: 'array',
+            description: "{type:'arrow', points:[[x1,y1],[x2,y2]], strokeColor:'red'} ou {type:'text', x, y, text, strokeColor:'yellow'}. 400x300.",
+            items: { type: 'object' },
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'complete_mission',
+      description: "Valide la mission quand l'élève a compris.",
+      parameters: {
+        type: 'object',
+        required: ['xp_earned', 'artifact_name'],
+        properties: {
+          xp_earned: { type: 'number' },
+          artifact_name: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'suggest_guardian',
+      description: "Redirige vers un autre Gardien si hors matière.",
+      parameters: {
+        type: 'object',
+        required: ['subject', 'guardian_name'],
+        properties: {
+          subject: { type: 'string' },
+          guardian_name: { type: 'string' },
+        },
+      },
+    },
+  },
+];
+
+// ─── SYSTEM PROMPT ──────────────────────────────────────────────────────────
+
+function buildSystemPrompt(
+  userSystemPrompt: string,
+  classe: string | null,
+  sandboxElements: any[] | null,
+  hasUserImage: boolean
+): string {
+  const level = classe || 'non spécifié';
+
+  const instructions = `
+## OUTILS (OBLIGATOIRE)
+
+Tu DOIS appeler un outil quand c'est pertinent (display_schema, draw_schema, etc.).
+NE FAIS PAS de JSON quand tu appelles un outil (OpenAI gère ça).
+
+## FORMAT DE RÉPONSE FINALE (OBLIGATOIRE)
+
+Quand tu réponds à l'élève (sans outil), tu DOIS retourner un JSON valide avec ce schéma :
+
+{
+  "content": "Ta réponse textuelle pour l'élève (avec emojis 🏛️ ✨, markdown, gras, sauts de ligne)",
+  "evaluation": {
+    "evaluation": "correct|partial|incorrect",
+    "reasoning": "Analyse de la réponse élève",
+    "question_topic": "Sujet abordé",
+    "question_difficulty": "easy|medium|hard",
+    "mistakes": ["Erreur 1", "Erreur 2"]
+  } | null,
+  "svg_code": "<svg viewBox=...>...</svg>" | null
+}
+
+N'utilise JAMAIS de balises comme [EVAL_START] ou [SVG_START]. Tout doit être dans le JSON.
+`;
+
+  const sandbox = Array.isArray(sandboxElements) && sandboxElements.length > 0
+    ? `\n\n${sandboxElements.length} élément(s) sur le canvas.` : '';
+  const img = hasUserImage ? `\n\nPhoto envoyée. Analyse-la.` : '';
+
+  return `${userSystemPrompt}\nNiveau: ${level}.${instructions}${sandbox}${img}\n\nIMPORTANT: Réponds UNIQUEMENT en JSON valide.`;
+}
+
+// ─── TOOL EXECUTION ─────────────────────────────────────────────────────────
+
+async function executeTool(
+  name: string,
+  args: Record<string, any>,
+  ctx: {
+    classe: string | null; openaiKey: string; authHeader: string;
+    studentId?: string; sessionId?: string; chapterId?: string; logPerf: PerfLogger;
+  }
+): Promise<{
+  toolResult: string;
+  displaySchemaUrl?: string | null;
+  drawing?: { elements: unknown[]; clearBefore?: boolean } | null;
+  updateSandboxElements?: unknown[] | null;
+  missionCompleted?: boolean;
+  missionReward?: { xp: number; artifactName: string } | null;
+  redirect?: { subject: string; guardianName: string } | null;
+}> {
+  switch (name) {
+    case 'get_programme_officiel':
+      return { toolResult: await fetchProgrammeOfficiel(getCyclesForClasse(ctx.classe)) };
+
+    case 'draw_schema': {
+      const elements = generateSvgShape(args.shape || '');
+      return elements.length > 0
+        ? { toolResult: 'Figure dessinée.', drawing: { elements, clearBefore: true } }
+        : { toolResult: 'Forme non supportée.' };
+    }
+
+    case 'display_schema': {
+      const topic = args.topic || '';
+      console.log('[display_schema] Topic:', topic);
+      const { url, analysis } = await searchAndAnalyzeImage(topic, ctx.classe, ctx.openaiKey, ctx.logPerf);
+      if (url) {
+        return {
+          toolResult: `IMAGE AFFICHÉE.\n\nANALYSE VISUELLE :\n"${analysis}"\n\nPose une question socratique sur un détail visuel. En français.`,
+          displaySchemaUrl: url,
+        };
+      }
+      return { toolResult: `Aucune image pour "${topic}". Décris le concept simplement.` };
+    }
+
+    case 'update_sandbox': {
+      const els = Array.isArray(args.elements) ? args.elements : [];
+      if (els.length === 0) return { toolResult: 'Aucun élément.' };
+      const styled = els
+        .filter((el: any) => el.type === 'arrow' || el.type === 'text')
+        .map((el: any) => ({
+          ...el,
+          strokeColor: el.type === 'arrow' ? (el.strokeColor ?? '#ef4444') : (el.strokeColor ?? '#e2e8f0'),
+          strokeWidth: el.type === 'arrow' ? (el.strokeWidth ?? 2) : el.strokeWidth,
+          roughness: el.type === 'arrow' ? 0 : el.roughness,
+          backgroundColor: 'transparent',
+        }));
+      return { toolResult: 'Annotations ajoutées.', updateSandboxElements: styled };
+    }
+
+    case 'complete_mission': {
+      const { studentId, sessionId, chapterId, authHeader } = ctx;
+      if (!sessionId || !chapterId || !studentId) return { toolResult: 'Données manquantes.' };
+
+      const xp = args.xp_earned ?? 50;
+      const artifact = args.artifact_name ?? 'Artefact du Savoir';
+      const endAt = new Date().toISOString();
+      const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      await supabase.from('curriculum').update({ status: 'maitrise', updated_at: endAt }).eq('id', chapterId);
+      const { data: sess } = await supabase.from('sessions').select('start_at').eq('id', sessionId).single();
+      const dur = sess ? Math.round((new Date(endAt).getTime() - new Date(sess.start_at).getTime()) / 60000) : 0;
+      await supabase.from('sessions').update({ end_at: endAt, duration_minutes: dur, xp_earned: xp, artifacts_found: [artifact] }).eq('id', sessionId);
+
+      const { data: gam } = await supabase.from('gamification').select('xp, artifacts_collected').eq('student_id', studentId).single();
+      if (gam) {
+        const nxp = gam.xp + xp;
+        const rank = nxp >= 10000 ? 'Maître Explorateur' : nxp >= 5000 ? 'Explorateur Légendaire' : nxp >= 2500 ? 'Explorateur Expert' : nxp >= 1000 ? 'Explorateur Confirmé' : nxp >= 500 ? 'Explorateur Novice' : 'Apprenti Explorateur';
+        const arts = [...((gam.artifacts_collected as object[]) || []), { id: crypto.randomUUID(), name: artifact, description: 'Maîtrise du chapitre', icon: '🏆', rarity: 'common', unlocked_at: endAt }];
+        await supabase.from('gamification').update({ xp: nxp, rank, artifacts_collected: arts, updated_at: endAt }).eq('student_id', studentId);
+      }
+      return { toolResult: `+${xp} XP, "${artifact}".`, missionCompleted: true, missionReward: { xp, artifactName: artifact } };
+    }
+
+    case 'suggest_guardian':
+      return { toolResult: `Redirection vers ${args.guardian_name}.`, redirect: { subject: args.subject || '', guardianName: args.guardian_name || '' } };
+
+    default:
+      return { toolResult: `Outil "${name}" inconnu.` };
+  }
+}
+
+// ─── HANDLER PRINCIPAL ──────────────────────────────────────────────────────
+
+const MAX_ITERATIONS = 4;
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  // --- PROXY IMAGE POUR CONTOURNER CORS ---
-  if (req.method === 'GET') {
-    const url = new URL(req.url);
-    const imageUrl = url.searchParams.get('image_url');
-    if (imageUrl) {
-      try {
-        console.log('[Proxy] Fetching image:', imageUrl);
-        // Important: Add User-Agent to avoid blocking by Wikimedia/others (Cloudflare often blocks Deno without UA)
-        const imgRes = await fetch(imageUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-          }
-        });
-
-        if (!imgRes.ok) {
-          console.error('[Proxy] Upstream Error:', imgRes.status, imgRes.statusText);
-          return new Response(`Image Fetch Error: ${imgRes.status} ${imgRes.statusText}`, { status: imgRes.status, headers: corsHeaders });
-        }
-
-        const blob = await imgRes.blob();
-        return new Response(blob, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': imgRes.headers.get('Content-Type') || 'application/octet-stream',
-            'Cache-Control': 'public, max-age=3600'
-          }
-        });
-      } catch (e) {
-        console.error('[Proxy] Error:', e);
-        return new Response('Proxy Error', { status: 500, headers: corsHeaders });
-      }
-    }
-  }
-  // ----------------------------------------
+  const rid = crypto.randomUUID().slice(0, 8);
+  const logPerf = createPerfLogger(rid);
+  logPerf('Request');
 
   try {
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) {
-      return err(
-        'OPENAI_API_KEY non configurée. Déploie avec: supabase secrets set OPENAI_API_KEY=sk-...'
-      );
-    }
-
+    if (!openaiKey) return err('OPENAI_API_KEY manquante.');
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return err('Non authentifié. Reconnecte-toi.');
+    if (!authHeader) return err('Non authentifié.');
+
+    // Proxy image avec validation stricte (SSRF Protection)
+    const reqUrl = new URL(req.url);
+    const proxyUrl = reqUrl.searchParams.get('image_url');
+    if (req.method === 'GET' && proxyUrl) {
+      try {
+        const allowedDomains = ['wikipedia.org', 'wikimedia.org', 'upload.wikimedia.org', 'commons.wikimedia.org'];
+        const targetUrl = new URL(proxyUrl);
+
+        // Vérification du domaine autorisé
+        const isAllowed = allowedDomains.some(domain => targetUrl.hostname.endsWith(domain));
+        if (!isAllowed) {
+          return err('Domaine non autorisé pour le proxy.');
+        }
+
+        // Vérification du protocole (HTTP/HTTPS uniquement)
+        if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+          return err('Protocole non autorisé.');
+        }
+
+        const r = await fetchWithTimeout(proxyUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' }, timeoutMs: 15000 });
+        if (!r.ok) {
+          return new Response(JSON.stringify({ error: `Proxy: ${r.status}` }), {
+            status: r.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(await r.blob(), {
+          headers: { ...corsHeaders, 'Content-Type': r.headers.get('Content-Type') || 'application/octet-stream', 'Cache-Control': 'public, max-age=3600' },
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: `Proxy: ${e?.message}` }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
-    const { message, history, systemPrompt, studentId, classe, sessionId, chapterId, dailyMinutesUsed, dailyTimeLimit, sandboxElements, userImageBase64 } =
-      await req.json();
+    const payload = await req.json();
+    const { message, history, systemPrompt, studentId, classe, sessionId, chapterId, sandboxElements, userImageBase64 } = payload;
+    logPerf('Parsed');
 
-    if (!message || typeof message !== 'string') {
-      return err('message requis');
+    if (!message || typeof message !== 'string') return err('message requis.');
+
+    // ─── SÉCURITÉ : Validation Identité & Limite de Temps (Server-Side) ───
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) return err('Token invalide ou expiré.');
+
+    // Vérification cohérence ID (anti-spoofing)
+    if (studentId && user.id !== studentId) {
+      // Tolérance pour les parents qui testent (si implémenté un jour), sinon rejet
+      // Pour l'instant on rejette si l'ID ne matche pas
+      return err('Incohérence identité.');
     }
 
-    const limit = dailyTimeLimit ?? 120;
-    const used = dailyMinutesUsed ?? 0;
-    if (used >= limit) {
-      return ok({
-        content:
-          "Tu as atteint ta limite de temps pour aujourd'hui, exploratrice ! Repose-toi bien et reviens demain pour de nouvelles expéditions. 🌅",
-      });
+    // Calcul du temps utilisé (Source de vérité : Base de données)
+    const { data: profile } = await supabaseClient.from('profiles').select('daily_time_limit').eq('id', user.id).single();
+    const limit = profile?.daily_time_limit ?? 120;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0); // Début de journée UTC
+
+    const { data: sessions } = await supabaseClient
+      .from('sessions')
+      .select('id, start_at, duration_minutes')
+      .eq('student_id', user.id)
+      .gte('start_at', todayStart.toISOString());
+
+    let minutesUsed = 0;
+    if (sessions) {
+      const now = Date.now();
+      for (const s of sessions) {
+        if (s.duration_minutes != null) {
+          minutesUsed += s.duration_minutes;
+        } else if (s.id === sessionId) {
+          // Session en cours : on calcule le delta
+          const currentDuration = Math.floor((now - new Date(s.start_at).getTime()) / 60000);
+          minutesUsed += Math.max(0, currentDuration);
+        }
+      }
     }
 
-    const tools = [
-      {
-        type: 'function' as const,
-        function: {
-          name: 'get_programme_officiel',
-          description:
-            "Récupère le programme officiel de l'Éducation nationale pour le collège (cycles 3 et 4). À appeler quand l'élève demande de charger, récupérer, afficher ou voir son programme scolaire, le programme officiel, etc.",
-          parameters: {
-            type: 'object',
-            properties: {
-              cycle_hint: {
-                type: 'string',
-                enum: ['Cycle 3', 'Cycle 4', 'les deux'],
-                description:
-                  "Cycle ciblé : 'Cycle 3' pour 6ème, 'Cycle 4' pour 5ème-4ème-3ème, 'les deux' si classe inconnue",
-              },
-            },
-          },
-        },
-      },
-      {
-        type: 'function' as const,
-        function: {
-          name: 'draw_schema',
-          description:
-            "Dessine une figure géométrique simple. UTILISE CET OUTIL pour : triangle, carré, rectangle, cercle, pythagore, thales. SI CA NE MARCHE PAS ou pour concepts complexes (fonctions, etc.), appelle display_schema.",
-          parameters: {
-            type: 'object',
-            required: ['shape'],
-            properties: {
-              shape: {
-                type: 'string',
-                enum: ['triangle', 'square', 'rectangle', 'circle', 'pythagore', 'thales'],
-                description: 'La forme à dessiner.',
-              },
-            },
-          },
-        },
-      },
-      {
-        type: 'function' as const,
-        function: {
-          name: 'update_sandbox',
-          description:
-            "Injecte des annotations dans le Grimoire. Schéma professionnel : utilise UNIQUEMENT des flèches (arrow) fines et du texte (text). Interdiction formelle : pas de cercles, ellipses, rectangles, diamants, freedraw ou formes remplies qui cachent l'image.",
-          parameters: {
-            type: 'object',
-            required: ['elements'],
-            properties: {
-              elements: {
-                type: 'array',
-                description:
-                  "Éléments autorisés : arrow {type:'arrow',x,y,points:[[0,0],[w,h]],strokeColor:'#ef4444',strokeWidth:2,roughness:0} et text {type:'text',x,y,text,width,height,strokeColor:'#e2e8f0',fontSize:14}. L'image est centrée (x:80,y:60, 400x300). Place les flèches en partant de ce repère. Une flèche fine + un label à côté, rien d'autre.",
-                items: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-      {
-        type: 'function' as const,
-        function: {
-          name: 'display_schema',
-          description:
-            "Affiche une image éducative (Wikimedia Commons) dans le Grimoire. Analyse le message, identifie le concept visuel demandé, puis choisis un terme de recherche optimisé : anglais, format 'X diagram', 'X anatomy' ou 'X cross section' (2-4 mots). Adapte dynamiquement à la matière et au sujet. N'envoie AUCUN élément update_sandbox par défaut.",
-          parameters: {
-            type: 'object',
-            required: ['topic'],
-            properties: {
-              topic: {
-                type: 'string',
-                description: "Recherche une image scientifique via Perplexity et l'analyse avec Vision. Terme de recherche : anglais. Adapte au concept demandé et au NIVEAU SCOLAIRE. Précise 'human' pour l'anatomie.",
-              },
-            },
-          },
-        },
-      },
-      {
-        type: 'function' as const,
-        function: {
-          name: 'complete_mission',
-          description:
-            "Appelle quand l'élève a validé sa compréhension du chapitre (réponses correctes, explication réussie). Récompense la mission terminée : met à jour le curriculum en maîtrise, complète la session et attribue l'artefact.",
-          parameters: {
-            type: 'object',
-            required: ['xp_earned', 'artifact_name'],
-            properties: {
-              xp_earned: { type: 'number', description: 'Points XP gagnés (ex: 50)' },
-              artifact_name: { type: 'string', description: "Nom de l'artefact gagné (ex: Cristal du Savoir)" },
-            },
-          },
-        },
-      },
-      {
-        type: 'function' as const,
-        function: {
-          name: 'suggest_guardian',
-          description:
-            "Appelle UNIQUEMENT si la question concerne une matière DIFFÉRENTE de ta matière actuelle. Si tu es SVT/Physique-Chimie et que la question porte sur poumons, cœur, cellules, volcan, etc. → c'est DANS ta matière : NE PAS appeler, réponds normalement et utilise display_schema si pertinent.",
-          parameters: {
-            type: 'object',
-            required: ['subject', 'guardian_name'],
-            properties: {
-              subject: { type: 'string', description: 'Matière demandée (Maths, Français, SVT, etc.)' },
-              guardian_name: {
-                type: 'string',
-                description: 'Gardien adapté : Maths/Techno → Maître des Runes Numériques ; Français → Gardien des Glyphes Anciens ; Histoire-Géo → Chroniqueur des Civilisations ; SVT/Physique-Chimie → Alchimiste des Potions Mayas ; Anglais/Espagnol → Traducteur des Langages Perdus ; Arts/EPS/Musique/Théologie → Artisan des Créations Sacrées',
-              },
-            },
-          },
-        },
-      },
-    ];
+    console.log(`[TimeCheck] User: ${user.id} | Used: ${minutesUsed}m | Limit: ${limit}m`);
 
-    const systemWithTools =
-      (systemPrompt || '') +
-      `
+    if (minutesUsed >= limit) {
+      return ok({ content: "Limite de temps atteinte (validée par le temple). Repose-toi ! 🌅" });
+    }
 
-OUTILS DISPONIBLES :
+    // ──────────────────────────────────────────────────────────────────────
 
-1. get_programme_officiel : Récupère le programme officiel. Utilise-le quand l'élève demande "charge mon programme", "récupère le programme", etc.
-
-2. draw_schema : Pour les MATHS/GÉOMÉTRIE. Appelle avec 'shape' = 'triangle', 'square', 'circle' ou 'pythagore'. Simple et robuste.
-
-3. update_sandbox : Annotations sur IMAGE (display_schema) uniquement. Autorise UNIQUEMENT : flèches (arrow, strokeWidth:2, roughness:0) et labels texte. Interdit : cercles, ellipses, rectangles, diamants, freedraw. L'image (display_schema) est centrée x:80 y:60 400x300. Une flèche fine rouge + un label à côté.
-
-4. display_schema : Recherche une image éducative (via Perplexity) et l'analyse visuellement. Extrais le sujet, choisis un terme anglais optimisé. L'outil te renverra une ANALYSE VISUELLE que tu devras utiliser pour ta réponse socratique.
-
-5. complete_mission : Appelle UNIQUEMENT quand l'élève a validé sa compréhension (réponses correctes OU a bien accompli la tâche visuelle demandée). Avant d'appeler, vérifie dans sandboxElements si tu avais demandé une action visuelle (ex: "entoure", "relie") que l'élève a bien exécutée.
-
-6. suggest_guardian : Appelle UNIQUEMENT si la question concerne une matière DIFFÉRENTE de ta matière actuelle. Si la question est DANS ta matière (ex: SVT + poumons/cœur/cellules ; Maths + équations ; Français + conjugaison) → NE PAS appeler suggest_guardian, réponds normalement.
-
-⚠️ HORS-SUJET : suggest_guardian SEULEMENT si la question est sur une matière AUTRE que la tienne. Vérifie le CONTEXTE ACTUEL (Matière) avant d'appeler.
-
-## PROTOCOLE DE GÉNÉRATION SVG
-- **Usage :** Obligatoire pour Maths, Physique, Chimie et schémas simples de SVT.
-- **Format :** Tu dois générer un bloc de code SVG valide entre des balises spécifiques : [SVG_START] <svg viewBox="0 0 400 400"> ... </svg> [SVG_END].
-- **Style :** - viewBox="0 0 400 400" pour la cohérence.
-  - Fond blanc ou transparent.
-  - Couleurs vives pour les éléments clés (ex: #E74C3C pour le sang oxygéné, #3498DB pour l'azote).
-  - **Labels :** Utilise la balise <text> pour nommer CHAQUE partie du schéma. C'est crucial pour l'analyse visuelle.
-
-## PROTOCOLE D'ÉVALUATION DES RÉPONSES (OBLIGATOIRE)
-
-Après CHAQUE réponse de l'élève à une question que tu as posée, tu DOIS évaluer sa réponse :
-
-1. **Évalue la réponse** :
-   - ✅ **correct** : Réponse juste et complète
-   - ⚡ **partial** : Réponse partiellement correcte (manque des détails importants)
-   - ❌ **incorrect** : Réponse fausse ou hors-sujet
-
-2. **Retourne l'évaluation** entre balises [EVAL_START] et [EVAL_END] :
-[EVAL_START]
-{
-  "evaluation": "correct" | "partial" | "incorrect",
-  "reasoning": "Explication de ton évaluation",
-  "mistakes": ["erreur 1", "erreur 2"],
-  "question_topic": "Théorème de Pythagore",
-  "question_difficulty": "easy" | "medium" | "hard"
-}
-[EVAL_END]
-
-3. **Adapte ton feedback** :
-   - Si **correct** : Félicite chaleureusement
-   - Si **partial** : Encourage et demande de préciser/compléter
-   - Si **incorrect** : Explique l'erreur SANS donner la réponse directe, guide vers la solution
-
-**Exemple de réponse complète** :
-✅ Parfait, exploratrice ! Le cœur possède bien **4 cavités** : 2 ventricules et 2 oreillettes. +20 XP 🌟
-
-[EVAL_START]
-{"evaluation":"correct","reasoning":"Réponse complète et exacte","question_topic":"Anatomie du cœur","question_difficulty":"easy"}
-[EVAL_END]
-
-**Important** : Place TOUJOURS l'évaluation APRÈS ton message à l'élève, jamais avant.`;
-
-    const sandboxContext =
-      Array.isArray(sandboxElements) && sandboxElements.length > 0
-        ? `\n\n--- ÉTAT DU GRIMMOIRE (canvas) ---\nL'élève a actuellement ${sandboxElements.length} élément(s) sur le canvas. Tu peux demander "entoure la réponse", "relie ces deux concepts", etc. Avant complete_mission, vérifie que l'élève a bien ajouté l'élément demandé.\n`
-        : '';
-
-    // Approche dynamique : l'IA décide quand appeler display_schema (pas de mots-clés en dur)
-    const contextLevel = classe ? `NIVEAU SCOLAIRE : ${classe}. ` : '';
-    const schemaContext = `\n\n⚠️ GRIMMOIRE (IMPORTANT) :
-    ${contextLevel}Adapte TOUJOURS le contenu au niveau de l'élève (ex: 6ème = simple, 3ème = détaillé).
-    1. MATHS / GÉOMÉTRIE :
-       - Figures simples (triangle, carré, thalès...) : Appelle draw_schema(shape: "triangle" | "square" | "circle" | "pythagore" | "thales").
-       - Concepts complexes (fonctions, graphiques, 3D...) : Appelle display_schema(topic: "anglais").
-    2. AUTRES (SVT, Histoire, Français, Arts...) :
-       - Appelle TOUJOURS display_schema(topic: "terme anglais") — format "X diagram", "X anatomy", "X map".
-       - Exemples : "human heart diagram" (ajoute 'human' pour l'anatomie), "roman empire map", "sentence diagram", "mind map".
-    Jamais d'URL en dur. Annotations : flèches + texte uniquement.\n`;
-
-    const imageContext = userImageBase64
-      ? `\n\n--- IMAGE REÇUE ---\nL'élève a envoyé une photo (cahier, livre, leçon). Analyse le contenu visuellement. Dis "J'ai analysé ton grimoire" ou équivalent. Si tu ajoutes des annotations, utilise UNIQUEMENT des flèches fines (arrow, strokeWidth:2, roughness:0) et du texte — jamais de cercles ou formes remplies.\n`
-      : '';
-
-    const messages: { role: string; content: string | { type: string; text?: { type: string; text: string }[]; image_url?: { url: string } }[] }[] = [
-      { role: 'system', content: systemWithTools + sandboxContext + schemaContext + imageContext },
-      ...(Array.isArray(history)
-        ? history.slice(-10).map((m: { role?: string; content?: string }) => ({
-          role: (m.role === 'assistant' ? 'assistant' : 'user') as string,
-          content: (m.content || '').toString(),
-        }))
-        : []),
-    ];
+    const systemContent = buildSystemPrompt(systemPrompt || '', classe || null, sandboxElements, !!userImageBase64);
+    const safeHistory = safeSliceHistory(history || [], 10);
+    const messages: any[] = [{ role: 'system', content: systemContent }, ...safeHistory];
 
     if (userImageBase64) {
-      messages.push({
-        role: 'user',
-        content: [
-          { type: 'text', text: message },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${userImageBase64}` } },
-        ],
-      });
+      messages.push({ role: 'user', content: [{ type: 'text', text: message }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${userImageBase64}` } }] });
     } else {
       messages.push({ role: 'user', content: message });
     }
 
-    const openaiPayload: Record<string, unknown> = {
-      model: userImageBase64 ? 'gpt-4o' : 'gpt-4o-mini',
-      messages,
-      max_tokens: 1500,
-      tools,
-      tool_choice: 'auto',
-    };
-
+    const model = userImageBase64 ? 'gpt-4o' : 'gpt-4o-mini';
     let finalContent = '';
-    let collectedDrawing: { elements: unknown[]; appState?: Record<string, unknown> } | null = null;
-    let updateSandboxElements: unknown[] | null = null;
     let displaySchemaUrl: string | null = null;
+    let collectedDrawing: { elements: unknown[]; clearBefore?: boolean } | null = null;
+    let updateSandboxElements: unknown[] | null = null;
     let missionCompleted = false;
     let missionReward: { xp: number; artifactName: string } | null = null;
     let collectedRedirect: { subject: string; guardianName: string } | null = null;
-    let iterations = 0;
-    const maxIterations = 3;
+    let evaluation: any = null; // Variable d'évaluation pour le JSON
 
-    while (iterations < maxIterations) {
-      // tool_choice reste 'auto' : l'IA décide dynamiquement d'appeler display_schema ou non
-      let openaiResponse: Response;
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      logPerf(`Iter ${i + 1}`);
+      let oaiRes: Response;
       try {
-        openaiResponse = await fetchWithTimeout(
-          'https://api.openai.com/v1/chat/completions',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${openaiKey}`,
-            },
-            body: JSON.stringify(openaiPayload),
-            timeoutMs: 45000,
-          }
-        );
-      } catch (e) {
-        const isAbort = (e as Error).name === 'AbortError';
-        return err(
-          isAbort
-            ? "Le mentor met trop de temps à répondre. Réessaie dans un instant ! 🏕️"
-            : (e as Error).message
-        );
+        oaiRes = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_tokens: 1500,
+            tools: TOOLS,
+            tool_choice: 'auto',
+            response_format: { type: "json_object" }
+          }),
+          timeoutMs: 40000,
+        });
+      } catch (e: any) {
+        return err(e?.name === 'AbortError' ? "Trop long. Réessaie ! 🏕️" : e?.message || 'Erreur');
       }
 
-      if (!openaiResponse.ok) {
-        const errData = await openaiResponse.text();
-        return err(`OpenAI API: ${openaiResponse.status} - ${errData.slice(0, 300)}`);
-      }
+      if (!oaiRes.ok) return err(`OpenAI ${oaiRes.status}: ${(await oaiRes.text()).slice(0, 300)}`);
+      const data = await oaiRes.json();
+      const msg = data.choices?.[0]?.message;
+      if (!msg) return err('Réponse vide.');
 
-      const openaiData = await openaiResponse.json();
-      const choice = openaiData.choices?.[0];
-      const msg = choice?.message;
-
-      if (!msg) {
-        return err('Réponse OpenAI vide');
-      }
-
-      const content = msg.content;
-      const toolCalls = msg.tool_calls;
-
-      if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
+      if (msg.tool_calls?.length > 0) {
         messages.push(msg);
-        for (const tc of toolCalls) {
-          const fn = tc.function;
-          const name = fn?.name;
-          let args: {
-            cycle_hint?: string;
-            scene?: { elements: unknown[]; appState?: Record<string, unknown> };
-            elements?: unknown[];
-            topic?: string;
-            xp_earned?: number;
-            artifact_name?: string;
-            subject?: string;
-            guardian_name?: string;
-            shape?: string;
-          } = {};
-          try {
-            args = fn?.arguments ? JSON.parse(fn.arguments) : {};
-          } catch {
-            args = {};
-          }
+        for (const tc of msg.tool_calls) {
+          const args = safeJsonParse<Record<string, any>>(tc.function?.arguments || '{}', {});
+          const res = await executeTool(tc.function.name, args || {}, { classe, openaiKey, authHeader, studentId, sessionId, chapterId, logPerf });
 
-          if (name === 'get_programme_officiel') {
-            const cycles = getCyclesForClasse(classe || null);
-            const programmeText = await fetchProgrammeOfficiel(cycles);
-            messages.push({
-              role: 'tool',
-              content: programmeText,
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
-          } else if (name === 'draw_schema' && args.shape) {
-            const predefined = generateMathShape(args.shape);
-            if (predefined) {
-              collectedDrawing = predefined;
-              messages.push({
-                role: 'tool',
-                content: `Figure ${args.shape} dessinée avec succès.`,
-                tool_call_id: tc.id,
-              } as { role: string; content: string });
-            } else {
-              messages.push({
-                role: 'tool',
-                content: `Forme ${args.shape} non supportée. Utilise 'triangle', 'square', 'circle' ou 'pythagore'.`,
-                tool_call_id: tc.id,
-              } as { role: string; content: string });
-            }
-          } else if (name === 'display_schema' && args.topic) {
-            console.log('[display_schema] Topic:', args.topic);
-            const { url, analysis } = await searchAndAnalyzeImage(args.topic, classe, openaiKey);
+          if (res.displaySchemaUrl) displaySchemaUrl = res.displaySchemaUrl;
+          if (res.drawing) collectedDrawing = res.drawing;
+          if (res.updateSandboxElements) updateSandboxElements = res.updateSandboxElements;
+          if (res.missionCompleted) { missionCompleted = true; missionReward = res.missionReward || null; }
+          if (res.redirect) collectedRedirect = res.redirect;
 
-            let toolContent = '';
-            if (url) {
-              displaySchemaUrl = url;
-              console.log('[display_schema] Image trouvée:', url);
-              console.log('[display_schema] Analyse Vision:', analysis.slice(0, 50) + '...');
-
-              toolContent = `IMAGE AFFICHÉE : ${url}\n\nANALYSE VISUELLE (Vision API) :\n"${analysis}"\n\nCONSIGNE GARDIEN : Utilise cette analyse pour poser une question socratique précise sur un détail visuel (couleur, forme, texte) de ce schéma. Incarne le style Tomb Raider/Mystique.`;
-            } else {
-              console.log('[display_schema] Aucune image trouvée.');
-              toolContent = `Impossible de trouver une image fiable pour "${args.topic}". Décris le concept avec des mots mystérieux et demande à l'élève de l'imaginer.`;
-            }
-
-            messages.push({
-              role: 'tool',
-              content: toolContent,
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
-          } else if (name === 'update_sandbox') {
-            const els = Array.isArray(args.elements) ? args.elements : [];
-            const STROKE = '#e2e8f0';
-            const ARROW_STROKE = '#ef4444';
-
-            if (els.length > 0) {
-              // Schéma professionnel : ne garder que arrow et text ; enrichir les styles
-              const allowed = els.filter((el: unknown) => {
-                const t = (el as Record<string, unknown>).type;
-                return t === 'arrow' || t === 'text';
-              });
-              updateSandboxElements = allowed.map((el: unknown) => {
-                const e = el as Record<string, unknown>;
-                const isArrow = e.type === 'arrow';
-                return {
-                  ...e,
-                  strokeColor: isArrow ? (e.strokeColor ?? ARROW_STROKE) : (e.strokeColor ?? STROKE),
-                  strokeWidth: isArrow ? (e.strokeWidth ?? 2) : e.strokeWidth,
-                  roughness: isArrow ? (e.roughness ?? 0) : e.roughness,
-                  backgroundColor: e.backgroundColor ?? 'transparent',
-                  fillStyle: e.fillStyle ?? 'solid',
-                };
-              }) as unknown[];
-            } else if (!displaySchemaUrl) {
-              // Pas de fallback hardcodé : on guide l'IA pour qu'elle réagisse dynamiquement
-              messages.push({
-                role: 'tool',
-                content: 'Aucun élément reçu et aucune image. Réessaye display_schema avec un terme différent (anglais, format "X diagram" ou "X anatomy"), ou fournis des éléments (flèches + texte) via update_sandbox.',
-                tool_call_id: tc.id,
-              } as { role: string; content: string });
-            }
-            const toolResponse = els.length > 0
-              ? 'Éléments injectés dans le Grimoire ! L\'élève voit maintenant la base de travail.'
-              : displaySchemaUrl
-                ? 'Aucun élément fourni — l\'image reste affichée.'
-                : null;
-            if (toolResponse) {
-              messages.push({
-                role: 'tool',
-                content: toolResponse,
-                tool_call_id: tc.id,
-              } as { role: string; content: string });
-            }
-          } else if (name === 'complete_mission' && sessionId && chapterId && studentId) {
-            missionCompleted = true;
-            const xp = args.xp_earned ?? 50;
-            const artifact = args.artifact_name ?? 'Artefact du Savoir';
-            missionReward = { xp, artifactName: artifact };
-            const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-            const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-            const supabase = createClient(supabaseUrl, supabaseKey, {
-              global: { headers: { Authorization: authHeader } },
-            });
-            const endAt = new Date().toISOString();
-            const { data: sess } = await supabase.from('sessions').select('start_at').eq('id', sessionId).single();
-            const duration = sess
-              ? Math.round((new Date(endAt).getTime() - new Date(sess.start_at).getTime()) / 60000)
-              : 0;
-            await supabase.from('curriculum').update({ status: 'maitrise', updated_at: endAt }).eq('id', chapterId);
-            await supabase
-              .from('sessions')
-              .update({
-                end_at: endAt,
-                duration_minutes: duration,
-                xp_earned: xp,
-                artifacts_found: [artifact],
-              })
-              .eq('id', sessionId);
-            const { data: gam } = await supabase.from('gamification').select('xp, artifacts_collected').eq('student_id', studentId).single();
-            if (gam) {
-              const newXP = gam.xp + xp;
-              const newRank = newXP >= 10000 ? 'Maître Explorateur' : newXP >= 5000 ? 'Explorateur Légendaire' : newXP >= 2500 ? 'Explorateur Expert' : newXP >= 1000 ? 'Explorateur Confirmé' : newXP >= 500 ? 'Explorateur Novice' : 'Apprenti Explorateur';
-              const artifacts = [...((gam.artifacts_collected as object[]) || []), { id: crypto.randomUUID(), name: artifact, description: 'Artefact gagné pour la maîtrise du chapitre', icon: '🏆', rarity: 'common', unlocked_at: endAt }];
-              await supabase.from('gamification').update({ xp: newXP, rank: newRank, artifacts_collected: artifacts, updated_at: endAt }).eq('student_id', studentId);
-            }
-            messages.push({
-              role: 'tool',
-              content: `Mission accomplie ! +${xp} XP, artefact "${artifact}" attribué. Félicite l'exploratrice avec enthousiasme !`,
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
-          } else if (name === 'suggest_guardian' && args.subject && args.guardian_name) {
-            collectedRedirect = { subject: args.subject, guardianName: args.guardian_name };
-            messages.push({
-              role: 'tool',
-              content: `Redirection proposée vers ${args.guardian_name} pour la matière ${args.subject}. Un modal sera affiché à l'élève avec les boutons Rediriger et Annuler.`,
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
-          } else {
-            messages.push({
-              role: 'tool',
-              content: 'Outil exécuté.',
-              tool_call_id: tc.id,
-            } as { role: string; content: string });
-          }
+          messages.push({ role: 'tool', tool_call_id: tc.id, content: res.toolResult });
         }
-        openaiPayload.messages = messages;
-        openaiPayload.tools = tools;
-        openaiPayload.tool_choice = 'auto';
-        iterations++;
         continue;
       }
 
-      finalContent = (content || '').trim();
+      finalContent = (msg.content || '').trim();
+
+      // Nouveau Parsing JSON
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(finalContent);
+      } catch {
+        console.warn('JSON Parse failed, fallback text', finalContent.slice(0, 50));
+        parsed = { content: finalContent };
+      }
+
+      finalContent = parsed.content || "Je n'ai pas compris. Peux-tu reformuler ? 🏛️";
+
+      // Extraction Evaluation depuis JSON
+      evaluation = parsed.evaluation || null;
+
+      // Extraction SVG depuis JSON
+      if (parsed.svg_code) {
+        collectedDrawing = { elements: [], clearBefore: true, svgCode: parsed.svg_code } as any;
+      }
+
+      // Nettoyage pour le retour final (on ne retourne que ce qui est nécessaire)
+      // La variable 'evaluation' est déjà extraite pour être passée plus bas
+      // Le svg_code est dans drawingData
+
       break;
     }
 
     if (!finalContent) {
-      finalContent = updateSandboxElements?.length
-        ? "Voici un schéma dans le Grimoire pour t'aider ! Regarde à droite. 🗻"
-        : "Je n'ai pas pu récupérer le programme cette fois. Tu peux aller dans l'onglet Programme pour le consulter ! 🗺️";
+      finalContent = displaySchemaUrl ? "Image dans le Grimoire ! Observe bien. 🔍"
+        : updateSandboxElements?.length ? 'Schéma ajouté ! 🗻'
+          : 'Reformule ta question ! 🗺️';
     }
 
-    // Extraire l'évaluation si présente dans le contenu
-    let evaluation: {
-      evaluation: 'correct' | 'partial' | 'incorrect';
-      reasoning: string;
-      mistakes?: string[];
-      question_topic?: string;
-      question_difficulty?: 'easy' | 'medium' | 'hard';
-    } | null = null;
+    // (La section regex EVAL_START et SVG_START est supprimée car remplacée par le parsing JSON ci-dessus)
 
-    // Chercher un JSON d'évaluation entre balises [EVAL_START] et [EVAL_END]
-    const evalMatch = finalContent.match(/\[EVAL_START\](.*?)\[EVAL_END\]/s);
-    if (evalMatch) {
-      try {
-        evaluation = JSON.parse(evalMatch[1].trim());
-        // Retirer les balises du contenu final
-        finalContent = finalContent.replace(/\[EVAL_START\].*?\[EVAL_END\]/s, '').trim();
-        console.log('[chat] Évaluation extraite:', evaluation);
-      } catch (e) {
-        console.error('[chat] Erreur parsing évaluation:', e);
-      }
-    }
+    // SVG processing done internally above via collectedDrawing variable
 
-    const result: {
-      content: string;
-      drawing?: { elements: unknown[]; appState?: Record<string, unknown> };
-      updateSandbox?: { elements: unknown[] };
-      displaySchemaUrl?: string;
-      missionCompleted?: boolean;
-      missionReward?: { xp: number; artifactName: string };
-      redirectToGuardian?: { subject: string; guardianName: string };
-      evaluation?: {
-        evaluation: 'correct' | 'partial' | 'incorrect';
-        reasoning: string;
-        mistakes?: string[];
-        question_topic?: string;
-        question_difficulty?: 'easy' | 'medium' | 'hard';
-      };
-    } = { content: finalContent };
+    const result: Record<string, unknown> = { content: finalContent };
     if (collectedDrawing) result.drawing = collectedDrawing;
     if (updateSandboxElements) result.updateSandbox = { elements: updateSandboxElements };
-    if (collectedRedirect) {
-      result.redirectToGuardian = collectedRedirect;
-      if (!result.content.trim()) result.content = `Cette question concerne les ${collectedRedirect.subject}. Veux-tu aller voir le ${collectedRedirect.guardianName} ? 🗺️`;
-    }
     if (displaySchemaUrl) result.displaySchemaUrl = displaySchemaUrl;
-    if (missionCompleted && missionReward) {
-      result.missionCompleted = true;
-      result.missionReward = missionReward;
-    }
-    if (evaluation) {
-      result.evaluation = evaluation;
-    }
-    console.log('[chat] Réponse finale:', { hasDisplaySchemaUrl: !!displaySchemaUrl, hasUpdateSandbox: !!updateSandboxElements, hasEvaluation: !!evaluation });
+    if (collectedRedirect) { result.redirectToGuardian = collectedRedirect; if (!finalContent.trim()) result.content = `Question sur ${collectedRedirect.subject}. Voir le ${collectedRedirect.guardianName} ? 🗺️`; }
+    if (missionCompleted && missionReward) { result.missionCompleted = true; result.missionReward = missionReward; }
+    if (evaluation) result.evaluation = evaluation;
+
+    console.log('[chat]', { img: !!displaySchemaUrl, sandbox: !!updateSandboxElements, draw: !!collectedDrawing, eval: !!evaluation, mission: missionCompleted });
     return ok(result);
-  } catch (e) {
-    return err((e as Error).message);
+  } catch (e: any) {
+    console.error('[ERROR]', e?.message);
+    return err(`Souci : ${e?.message || 'Erreur inconnue'}`);
   }
 });
