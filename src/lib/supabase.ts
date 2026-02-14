@@ -155,7 +155,8 @@ export const signUpChildSelfRegister = async (
   classe?: string
 ) => {
   try {
-    const { data, error } = await supabase.functions.invoke('signup-child-self', {
+    // Timeout wrapper
+    const invokePromise = supabase.functions.invoke('signup-child-self', {
       body: {
         email: email.trim().toLowerCase(),
         password,
@@ -164,6 +165,14 @@ export const signUpChildSelfRegister = async (
         classe: classe || undefined,
       },
     });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout: Le serveur met trop de temps à répondre.')), 30000)
+    );
+
+    const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+
+    console.log('[SUPABASE_LIB] Fin invoke signup-child-self', { data, error });
 
     if (error) {
       if (error instanceof FunctionsHttpError && error.context) {
@@ -182,6 +191,7 @@ export const signUpChildSelfRegister = async (
     }
     return { data: data as { user?: { id: string } }, error: null };
   } catch (err) {
+    console.error('[SUPABASE_LIB] Exception invoke:', err);
     return { data: null, error: { message: (err as Error).message } };
   }
 };

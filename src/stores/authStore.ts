@@ -25,6 +25,7 @@ interface AuthState {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  registrationSuccess: boolean;
   error: string | null;
 
   // Actions
@@ -44,6 +45,7 @@ interface AuthState {
   resetPassword: (email: string) => Promise<{ error?: Error }>;
   approveChild: (childId: string) => Promise<void>;
   clearError: () => void;
+  resetRegistrationSuccess: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -53,6 +55,7 @@ export const useAuthStore = create<AuthState>()(
       session: null,
       isLoading: true,
       isAuthenticated: false,
+      registrationSuccess: false,
       error: null,
 
       initialize: async () => {
@@ -183,7 +186,7 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          set({ isLoading: false });
+          set({ isLoading: false, registrationSuccess: true });
           return {};
         } catch (error) {
           const msg = (error as Error).message;
@@ -273,6 +276,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearError: () => set({ error: null }),
+      resetRegistrationSuccess: () => set({ registrationSuccess: false }),
     }),
     {
       name: 'auth-storage',

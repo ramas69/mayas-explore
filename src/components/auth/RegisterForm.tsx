@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { Eye, EyeOff, User, Users } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
@@ -18,13 +18,13 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
   const [parentEmail, setParentEmail] = useState('');
   const [classe, setClasse] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
 
-  const { signUp, isLoading, error, clearError } = useAuthStore();
+  const { signUp, isLoading, error, clearError, registrationSuccess, resetRegistrationSuccess } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    resetRegistrationSuccess();
 
     if (role === 'enfant') {
       const trimmedParent = parentEmail.trim().toLowerCase();
@@ -47,14 +47,10 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         ? { parentEmail: parentEmail.trim().toLowerCase(), classe: classe || undefined }
         : undefined;
 
-    const { error } = await signUp(email, password, fullName, role, options);
-
-    if (!error) {
-      setIsSuccess(true);
-    }
+    await signUp(email, password, fullName, role, options);
   };
 
-  if (isSuccess) {
+  if (registrationSuccess) {
     return (
       <div className="w-full max-w-md p-8 stone-card rounded-2xl text-center">
         <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-emerald-500/20 rounded-full">
@@ -63,7 +59,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         <h2 className="font-['Cinzel_Decorative'] text-2xl font-bold text-amber-100 mb-4">
           {role === 'enfant' ? 'Demande envoyée !' : 'Compte créé !'}
         </h2>
-        <p className="text-amber-100/60 mb-6">
+        <div className="text-amber-100/60 mb-6">
           {role === 'enfant'
             ? (
               <div className="space-y-4">
@@ -71,8 +67,8 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
                 <p>Ensuite, demande à ton parent de valider ton compte depuis son email ou son tableau de bord.</p>
               </div>
             )
-            : 'Ton compte parent est créé. Vérifie tes emails pour confirmer ton adresse, puis tu pourras ajouter tes enfants.'}
-        </p>
+            : <p>Ton compte parent est créé. Vérifie tes emails pour confirmer ton adresse, puis tu pourras ajouter tes enfants.</p>}
+        </div>
         <button
           onClick={onToggleMode}
           className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 font-bold rounded-xl"

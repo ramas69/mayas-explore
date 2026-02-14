@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { LoginForm } from '../components/auth/LoginForm';
@@ -20,19 +20,25 @@ export function AuthPage() {
     const navigate = useNavigate();
     const mode = searchParams.get('mode');
     const [isLogin, setIsLogin] = useState(mode !== 'inscription');
-    const { user, isAuthenticated } = useAuthStore();
+
+    // Selectors: Only re-render when these specific values change
+    const user = useAuthStore((state) => state.user);
+    const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
     // Sync with URL when mode changes
     useEffect(() => {
         setIsLogin(mode !== 'inscription');
     }, [mode]);
 
-    const handleToggleMode = (toLogin: boolean) => {
+    console.log('AuthPage render:', { isAuthenticated, userRole: user?.role, mode, isLogin });
+
+    const handleToggleMode = useCallback((toLogin: boolean) => {
         navigate(toLogin ? '/auth' : '/auth?mode=inscription', { replace: true });
         setIsLogin(toLogin);
-    };
+    }, [navigate]);
 
     if (isAuthenticated && user) {
+        console.log('AuthPage: Redirecting user based on role', user.role);
         return <Navigate to={getRedirectForRole(user.role)} replace />;
     }
 
