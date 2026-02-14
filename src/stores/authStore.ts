@@ -60,47 +60,51 @@ export const useAuthStore = create<AuthState>()(
 
       initialize: async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-
+          // 1. Initial Load via Listener (Avoids race condition with getSession)
           supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('[AUTH] Change:', event);
+
+            const currentUser = get().user;
+            const currentSession = get().session;
+
             if (event === 'SIGNED_OUT') {
-              set({ user: null, session: null, isAuthenticated: false });
+              set({ user: null, session: null, isAuthenticated: false, isLoading: false });
               return;
             }
+
             if (session?.user) {
+              // Optimisation : Si c'est juste un refresh et qu'on a déjà le user, on ne recharge pas le profil
+              if ((event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
+                currentUser?.id === session.user.id &&
+                currentSession?.access_token !== session.access_token) {
+                // Just update session token if changed
+                set({ session, isLoading: false });
+                return;
+              }
+
+              // Si on a déjà le profil chargé pour cet user (INITIAL_SESSION avec data persistée), on évite le fetch
+              if (event === 'INITIAL_SESSION' && currentUser?.id === session.user.id) {
+                set({ session, isLoading: false });
+                return;
+              }
+
+              // Sinon (SIGNED_IN, ou changement user), on charge le profil
+              if (!currentUser || currentUser.id !== session.user.id) {
+                set({ isLoading: true }); // Show loading only if we really switch users
+              }
+
               const { data: profile } = await getProfile(session.user.id);
-              // Parent : lier les enfants en attente (parent_email = mon email)
+
               if (profile?.role === 'parent' && profile?.email) {
                 await linkPendingChildrenToParent(profile.id, profile.email);
               }
-              set({ user: profile, session, isAuthenticated: !!profile });
+              set({ user: profile, session, isAuthenticated: !!profile, isLoading: false });
+            } else if (!session) {
+              // No session (maybe waiting for auth)
+              set({ user: null, session: null, isAuthenticated: false, isLoading: false });
             }
           });
 
-          if (session?.user) {
-            let { data: profile } = await getProfile(session.user.id);
-
-            // Si pas de profil (trigger pas encore passé), on attend un peu et réessaie
-            if (!profile) {
-              await new Promise((r) => setTimeout(r, 500));
-              const res = await getProfile(session.user.id);
-              profile = res.data;
-            }
-
-            // Parent : lier les enfants en attente (parent_email = mon email)
-            if (profile?.role === 'parent' && profile?.email) {
-              await linkPendingChildrenToParent(profile.id, profile.email);
-            }
-
-            set({
-              user: profile,
-              session,
-              isAuthenticated: !!profile,
-              isLoading: false,
-            });
-          } else {
-            set({ isLoading: false });
-          }
         } catch (error) {
           set({ isLoading: false, error: (error as Error).message });
         }
@@ -247,12 +251,19 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signOut: async () => {
-        await supabase.auth.signOut({ scope: 'global' });
-        set({
-          user: null,
-          session: null,
-          isAuthenticated: false,
-        });
+        try {
+          await supabase.auth.signOut({ scope: 'global' });
+        } catch (error) {
+          console.error('[Auth] Error signing out:', error);
+        } finally {
+          set({
+            user: null,
+            session: null,
+            isAuthenticated: false,
+          });
+          // Force clear local storage if persist is used
+          localStorage.removeItem('auth-storage');
+        }
       },
 
       resetPassword: async (email: string) => {

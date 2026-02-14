@@ -2,12 +2,19 @@ import { create } from 'zustand';
 import { addXP, addArtifact, evolveTemple, getGamification } from '../lib/supabase';
 import type { Gamification, Artifact } from '../types';
 
+export interface XpToastData {
+  xp: number;
+  evaluation: 'correct' | 'partial' | 'incorrect';
+  streakCount?: number;
+}
+
 interface GamificationState {
   gamification: Gamification | null;
   isLoading: boolean;
   currentXP: number;
   showReward: boolean;
   lastReward: { type: 'xp'; value: number } | { type: 'artifact'; value: Artifact } | { type: 'temple'; value: number } | null;
+  xpToast: XpToastData | null;
 
   // Actions
   loadGamification: (studentId: string) => Promise<void>;
@@ -15,6 +22,8 @@ interface GamificationState {
   collectArtifact: (studentId: string, artifact: Artifact) => Promise<void>;
   evolveTempleStage: (studentId: string, stage: number) => Promise<void>;
   dismissReward: () => void;
+  showXpToast: (data: XpToastData) => void;
+  dismissXpToast: () => void;
   /** Affiche le reward modal pour une mission complétée (DB déjà mis à jour par l'Edge Function) */
   showMissionReward: (studentId: string, artifact: Artifact, xp: number) => Promise<void>;
 }
@@ -28,6 +37,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
   currentXP: 0,
   showReward: false,
   lastReward: null,
+  xpToast: null,
 
   loadGamification: async (studentId: string) => {
     set({ isLoading: true });
@@ -60,8 +70,7 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
     set({
       gamification: { ...gamification, xp: newXP },
       currentXP: newXP,
-      showReward: true,
-      lastReward: { type: 'xp', value: amount },
+      // Don't show full modal for regular XP — use xpToast in chat instead
     });
 
     // Auto-evolve temple if threshold reached
@@ -106,6 +115,14 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
 
   dismissReward: () => {
     set({ showReward: false, lastReward: null });
+  },
+
+  showXpToast: (data: XpToastData) => {
+    set({ xpToast: data });
+  },
+
+  dismissXpToast: () => {
+    set({ xpToast: null });
   },
 
   showMissionReward: async (studentId: string, artifact: Artifact) => {

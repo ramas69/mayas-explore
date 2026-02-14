@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGamificationStore } from '../../stores/gamificationStore';
+import { StudentStats } from '../profile/StudentStats';
 
 // Temple evolution stages
 const TEMPLE_STAGES = [
@@ -43,7 +44,7 @@ function TempleModel({ stage }: { stage: number }) {
       {/* Main Structure */}
       <mesh position={[0, 0.5, 0]}>
         <boxGeometry args={[2, 3, 2]} />
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={stageData.color}
           emissive={stageData.color}
           emissiveIntensity={stageData.glow * 0.3}
@@ -59,7 +60,7 @@ function TempleModel({ stage }: { stage: number }) {
       ].map(([x, z], i) => (
         <mesh key={i} position={[x, 0.5, z]}>
           <cylinderGeometry args={[0.1, 0.1, 3, 8]} />
-          <meshStandardMaterial 
+          <meshStandardMaterial
             color={stageData.color}
             emissive={stageData.color}
             emissiveIntensity={stageData.glow * 0.5}
@@ -76,7 +77,7 @@ function TempleModel({ stage }: { stage: number }) {
       {/* Pyramid Top */}
       <mesh position={[0, 3, 0]}>
         <coneGeometry args={[1.5, 1.5, 4]} />
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={stageData.color}
           emissive={stageData.color}
           emissiveIntensity={stageData.glow}
@@ -142,7 +143,7 @@ function Scene({ stage }: { stage: number }) {
     <>
       {/* Ambient Light */}
       <ambientLight intensity={0.3} />
-      
+
       {/* Directional Light (Moon/Sun) */}
       <directionalLight
         position={[5, 10, 5]}
@@ -199,71 +200,42 @@ export function TempleViewer() {
   const stageData = TEMPLE_STAGES[Math.min(stage, TEMPLE_STAGES.length - 1)];
 
   return (
-    <div className="min-h-[400px] sm:min-h-[500px] h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-3 sm:mb-4 p-3 sm:p-4 stone-card rounded-xl">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="font-['Cinzel_Decorative'] text-lg sm:text-xl font-bold text-amber-100 truncate">
-              Ton Temple Maya
-            </h3>
-            <p className="text-xs sm:text-sm text-amber-100/60 truncate">
-              Évolution: {stageData.name}
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-xl sm:text-2xl font-bold text-golden">
-              Niveau {stage + 1}
-            </p>
-            <p className="text-xs text-amber-100/50">
-              {gamification?.xp || 0} XP total
-            </p>
-          </div>
+    <div className="min-h-[400px] sm:min-h-[500px] h-full flex flex-col gap-6">
+      {/* 3D Canvas Section */}
+      <div className="flex-1 flex flex-col">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="font-['Cinzel_Decorative'] text-lg sm:text-xl font-bold text-amber-100 truncate">
+            Ton Temple Maya
+          </h3>
+          <span className="text-amber-400 font-['Cinzel_Decorative'] text-sm">
+            Stade : {stageData.name}
+          </span>
         </div>
-
-        {/* Progress to next stage */}
-        <div className="mt-3">
-          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all"
-              style={{ width: `${((gamification?.xp || 0) % 1000) / 10}%` }}
-            />
-          </div>
-          <p className="mt-1 text-xs text-amber-100/50 text-right">
-            Prochain niveau dans {1000 - ((gamification?.xp || 0) % 1000)} XP
-          </p>
-        </div>
-      </div>
-
-      {/* 3D Canvas */}
-      <div className="flex-1 min-h-[250px] sm:min-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden border border-amber-500/20">
-        <Canvas
-          camera={{ position: [5, 3, 5], fov: 50 }}
-          style={{ background: 'linear-gradient(to bottom, #0a1628, #0d3b2e)' }}
-        >
-          <Scene stage={stage} />
-        </Canvas>
-      </div>
-
-      {/* Stage Info */}
-      <div className="mt-3 sm:mt-4 grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
-        {TEMPLE_STAGES.slice(0, stage + 2).map((s, i) => (
-          <div
-            key={i}
-            className={`p-2 rounded-lg text-center text-xs ${
-              i === stage
-                ? 'bg-amber-500/30 border border-amber-400/50'
-                : i < stage
-                ? 'bg-emerald-500/20 text-emerald-400'
-                : 'bg-slate-800 text-slate-500'
-            }`}
+        <div className="flex-1 min-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden border border-amber-500/20 shadow-2xl shadow-amber-900/20 relative">
+          <Canvas
+            camera={{ position: [5, 3, 5], fov: 50 }}
+            style={{ background: 'linear-gradient(to bottom, #0a1628, #0d3b2e)' }}
           >
-            <span className={i === stage ? 'text-amber-300 font-medium' : ''}>
-              {s.name}
-            </span>
+            <Scene stage={stage} />
+          </Canvas>
+          {/* Stage Indicators Overlay */}
+          <div className="absolute bottom-4 left-4 right-4 flex justify-center gap-1.5 sm:gap-2 flex-wrap pointer-events-none">
+            {TEMPLE_STAGES.map((s, i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full transition-all duration-500 ${i <= stage
+                    ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]'
+                    : 'bg-slate-700'
+                  }`}
+                title={s.name}
+              />
+            ))}
           </div>
-        ))}
+        </div>
       </div>
+
+      {/* Stats Dashboard */}
+      <StudentStats />
     </div>
   );
 }

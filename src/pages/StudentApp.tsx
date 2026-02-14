@@ -1,11 +1,12 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useCurriculumStore } from '../stores/curriculumStore';
 import { useSandboxStore } from '../stores/sandboxStore';
 import { supabase, getSessionById, saveCanvasSnapshot } from '../lib/supabase';
 import { useSessionManager } from '../hooks/useSessionManager';
 import type { Subject, Curriculum, Session, SchoolZone } from '../types';
+import { SUBJECT_ORDER } from '../lib/programmeScolaire';
 import { ParticleEffects } from '../components/ParticleEffects';
 import { ChatInterface } from '../components/chat/ChatInterface';
 import { GrimoireModal } from '../components/map/GrimoireModal';
@@ -40,10 +41,11 @@ const STUDENT_TABS: StudentTab[] = ['map', 'chat', 'temple', 'bulletin', 'planni
 
 export function StudentApp() {
   const navigate = useNavigate();
-  const { tab } = useParams<{ tab: string }>();
+  const location = useLocation();
+  const { tab, subParam } = useParams<{ tab: string; subParam?: string }>();
   const activeTab: StudentTab = STUDENT_TABS.includes(tab as StudentTab) ? (tab as StudentTab) : 'map';
   const { user, signOut } = useAuthStore();
-  const { loadCurriculum, getChaptersBySubject } = useCurriculumStore();
+  const { loadCurriculum, getChaptersBySubject, curriculum } = useCurriculumStore();
   /* Refactored with useSessionManager */
   const { currentSessionId, setCurrentSessionId, selectedChapter, setSelectedChapter, startNewSession } = useSessionManager();
 
@@ -55,8 +57,11 @@ export function StudentApp() {
   const [planningData, setPlanningData] = useState<{ city_zone?: SchoolZone; weekly_slots?: { file_url?: string } } | null>(null);
 
   useEffect(() => {
-    if (user?.id) loadCurriculum(user.id);
-  }, [user?.id, loadCurriculum]);
+    // Force reload if curriculum is empty or just to be safe on mount (it handles existing data inside store)
+    if (user?.id) {
+      loadCurriculum(user.id);
+    }
+  }, [user?.id, loadCurriculum, curriculum.length]); // Added curriculum.length to retry if empty
 
   useEffect(() => {
     if (!user?.id) return;
@@ -119,26 +124,58 @@ export function StudentApp() {
 
   const sessionId = currentSessionId ?? 'demo-session';
 
+  // Handle Deep Linking / Navigation to specific Subject Chat
+  useEffect(() => {
+    if (activeTab === 'chat' && subParam) {
+      const subjectCandidate = decodeURIComponent(subParam);
+      // Validate subject
+      if (SUBJECT_ORDER.includes(subjectCandidate as Subject)) {
+        const subject = subjectCandidate as Subject;
+
+        // Retrieve chapter from state if available (from Map click)
+        const stateChapter = (location.state as { chapter?: Curriculum })?.chapter;
+
+        // Determine which chapter to load
+        // Avoid infinite loop: if we are already on this subject, do nothing (or just updates chapter if needed, but session is already active)
+        if (selectedChapter?.subject === subject && sessionId !== 'demo-session') {
+          return;
+        }
+
+        if (stateChapter && stateChapter.subject === subject) {
+          startNewSession(subject, stateChapter.chapter_name, stateChapter);
+        } else {
+          // Default logic: find first unmastered chapter
+          const chapters = getChaptersBySubject(subject);
+          const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0];
+          const chapterName = chapter?.chapter_name ?? subject;
+          startNewSession(subject, chapterName, chapter);
+        }
+      }
+    }
+  }, [activeTab, subParam, location.state, getChaptersBySubject, startNewSession, selectedChapter, sessionId]);
+
   const handleSelectGuardian = async (subject: Subject) => {
     setMenuOpen(false);
-    const chapters = getChaptersBySubject(subject);
-    // Find first unmastered chapter or default to the subject name
-    const chapter = chapters.find((c) => c.status !== 'maitrise') ?? chapters[0];
-
-    // If no chapter found (rare), we just pass the subject name as chapter name
-    const chapterName = chapter?.chapter_name ?? subject;
-
-    await startNewSession(subject, chapterName, chapter);
+    navigate(`/app/chat/${subject}`);
   };
 
   const handleNewChat = async (chapter: Curriculum) => {
     setMenuOpen(false);
-    await startNewSession(chapter.subject, chapter.chapter_name, chapter);
+    navigate(`/app/chat/${chapter.subject}`, { state: { chapter } });
   };
 
   const handleLoadSession = (session: Session) => {
     setMenuOpen(false);
     setCurrentSessionId(session.id);
+    // We navigate to the chat with the subject in URL
+    if (session.subject) {
+      navigate(`/app/chat/${session.subject}`);
+    } else {
+      navigate('/app/chat');
+    }
+
+    // Logic to reconstruct simple chapter object if needed is handled by session ID loading in ChatInterface
+    // But we might want to set selectedChapter for context
     let chapter: Curriculum | null = null;
     if (session.subject && session.chapter) {
       const chapters = getChaptersBySubject(session.subject);
@@ -157,7 +194,6 @@ export function StudentApp() {
     }
     setSelectedChapter(chapter);
     setGrimoireSubject(null);
-    navigate('/app/chat');
   };
 
   const setActiveTab = (id: StudentTab) => {
@@ -197,15 +233,8 @@ export function StudentApp() {
           </span>
           <button
             onClick={async () => {
-              console.log('[StudentApp] SignOut clicked');
-              try {
-                await signOut();
-                console.log('[StudentApp] SignOut completed, navigating...');
-                navigate('/auth', { replace: true });
-              } catch (e) {
-                console.error('[StudentApp] SignOut error:', e);
-                alert("Erreur lors de la déconnexion");
-              }
+              await signOut();
+              navigate('/auth', { replace: true });
             }}
             className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-amber-100/60 hover:text-amber-400 transition-colors"
           >

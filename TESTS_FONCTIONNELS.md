@@ -7,6 +7,305 @@
 ## 🎓 RÔLE : ÉLÈVE (Student)
 
 ### 1. Authentification & Profil
+- [x] **Connexion** avec email/mot de passe
+- [x] **Déconnexion** depuis le header
+- [x] **Voir son profil** (nom, classe, XP, niveau)
+- [ ] **Consulter ses statistiques** (temps d'utilisation, progression)
+
+### 2. Carte des Matières (Jungle Map)
+- [x] **Visualiser la carte** avec toutes les matières
+- [x] **Voir les statuts** des matières (danger, surveiller, reviser, ok)
+- [x] **Cliquer sur une matière** pour ouvrir la modale
+- [x] **Voir les chapitres** d'une matière dans la modale
+- [x] **Démarrer une conversation** depuis un chapitre
+- [x] **Accéder au Grimoire** (historique) d'une matière
+
+### 3. Sélection de Gardien (Guardian Picker)
+- [x] **Voir tous les gardiens** disponibles
+- [x] **Lire les descriptions** de chaque gardien
+- [x] **Sélectionner un gardien** pour démarrer une conversation
+- [x] **Voir le gardien approprié** selon la matière choisie
+
+### 4. Chat avec l'IA
+- [ ] **Envoyer un message texte**
+- [ ] **Recevoir une réponse** de l'IA
+- [ ] **Voir l'indicateur "typing..."** pendant que l'IA répond
+- [ ] **Upload d'image** (photo de devoir, schéma)
+- [ ] **Recevoir des images** (schémas, diagrammes) de l'IA
+- [ ] **Voir les messages** avec formatage Markdown (gras, listes, etc.)
+- [ ] **Autoscroll** vers le dernier message
+- [ ] **Redirection vers un autre gardien** si question hors-sujet
+- [ ] **Limite de temps journalière** respectée (message si dépassée)
+
+### 5. Grimoire (Sandbox Excalidraw)
+- [ ] **Voir les images** envoyées par l'IA
+- [ ] **Dessiner** sur le canvas
+- [ ] **Ajouter du texte** et des annotations
+- [ ] **Utiliser les outils** Excalidraw (formes, flèches, etc.)
+- [ ] **Sauvegarder automatiquement** les modifications
+- [ ] **Charger l'état précédent** en revenant sur une session
+- [ ] **Voir les dessins IA** (Maths) s'afficher automatiquement
+
+### 6. Programme Scolaire
+- [ ] **Voir son programme** par matière
+- [ ] **Consulter les chapitres** et leur statut
+- [ ] **Voir la progression** (pas vu, vu en classe, maîtrisé)
+- [ ] **Filtrer par matière**
+
+### 7. Planning de Révision
+- [ ] **Voir son emploi du temps** uploadé
+- [ ] **Consulter les créneaux** de révision suggérés
+- [ ] **Voir les vacances scolaires** de sa zone
+- [ ] **Voir les prochaines vacances** mises en avant
+
+### 8. Récompenses & Gamification (PROCHAIN TEST)
+- [ ] **Gagner des XP** après avoir complété un exercice
+- [ ] **Voir la modale de victoire** avec animation
+- [ ] **Débloquer des artefacts** (trophées)
+- [ ] **Consulter ses artefacts** dans le profil
+- [ ] **Voir son niveau** progresser
+
+### 9. Grimoire Modal (Historique)
+- [ ] **Ouvrir l'historique** d'une matière
+- [ ] **Voir toutes les sessions** passées
+- [ ] **Cliquer sur une session** pour la rouvrir
+- [ ] **Voir le titre** et la date de chaque session
+- [ ] **Reprendre une conversation** là où elle s'était arrêtée
+
+### 10. Navigation & UI
+- [ ] **Menu hamburger** (mobile) fonctionne
+- [ ] **Sidebar** (desktop) fonctionne
+- [ ] **Bottom navigation** (mobile) fonctionne
+- [ ] **Basculer entre les onglets** (Carte, Chat, Programme, Planning, Profil)
+- [ ] **Animations** et effets de particules visibles
+- [ ] **Responsive** sur mobile, tablette, desktop
+
+---
+
+## 👨‍👩‍👧 RÔLE : PARENT
+
+### 1. Authentification & Accès
+- [x] **Connexion** avec email/mot de passe
+- [x] **Déconnexion**
+- [x] **Voir la liste** de ses enfants
+
+### 2. Dashboard Parent
+- [ ] **Voir les statistiques** de chaque enfant
+- [ ] **Consulter le temps d'utilisation** journalier/hebdomadaire
+- [ ] **Voir la progression** par matière
+- [ ] **Accéder au profil** de chaque enfant
+
+### 3. Gestion du Profil Enfant
+- [x] **Modifier le nom** de l'enfant
+- [x] **Changer la classe** (6ème, 5ème, 4ème, 3ème)
+- [x] **Définir la limite de temps** journalière
+- [x] **Sauvegarder les modifications**
+
+### 4. Upload de Bulletin
+- [ ] **Uploader un bulletin** (PDF ou image)
+- [ ] **Voir la prévisualisation** du bulletin uploadé
+- [ ] **Lancer l'analyse IA** du bulletin
+- [ ] **Voir les résultats** de l'analyse (matières, notes, statuts)
+- [ ] **Consulter les recommandations** de l'IA
+- [ ] **Voir l'historique** des bulletins uploadés
+- [ ] **Supprimer un bulletin**
+
+### 5. Upload d'Emploi du Temps
+- [ ] **Uploader un emploi du temps** (PDF ou image)
+- [ ] **Voir la prévisualisation** de l'emploi du temps
+- [ ] **Lancer l'analyse IA** de l'emploi du temps
+- [ ] **Voir les créneaux** extraits automatiquement
+- [ ] **Modifier les créneaux** manuellement
+- [ ] **Voir les créneaux de vacances** séparément
+- [ ] **Sauvegarder les modifications**
+- [ ] **Supprimer l'emploi du temps**
+
+### 6. Configuration du Planning
+- [x] **Choisir la zone scolaire** (A, B, C)
+- [ ] **Voir les vacances** correspondantes
+- [ ] **Modifier les créneaux** de révision
+- [ ] **Ajouter des créneaux** personnalisés
+- [ ] **Supprimer des créneaux**
+- [ ] **Voir le planning** hebdomadaire
+
+### 7. Notes Prioritaires
+- [ ] **Ajouter une note** pour l'enfant
+- [ ] **Définir une priorité** (matière à travailler)
+- [ ] **Voir les notes** existantes
+- [ ] **Modifier une note**
+- [ ] **Supprimer une note**
+- [ ] **Vérifier que l'IA** utilise ces notes dans ses réponses
+
+### 8. Suivi & Monitoring
+- [ ] **Voir l'historique** des sessions de chat
+- [ ] **Consulter les conversations** de l'enfant
+- [ ] **Voir les chapitres** travaillés
+- [ ] **Suivre la progression** par matière
+- [ ] **Recevoir des alertes** (limite de temps, etc.)
+
+---
+
+## 🔧 TESTS TECHNIQUES
+
+### 1. Performance
+- [x] **Temps de chargement** < 3 secondes
+- [x] **Pas de lag** lors du scroll
+- [x] **Animations fluides** (60 fps)
+- [x] **Hot reload** fonctionne en dev
+
+### 2. Gestion des Erreurs
+- [x] **Message d'erreur clair** si connexion échoue
+- [x] **Timeout du chat** après 2 minutes
+- [x] **Gestion des erreurs** Supabase (navigatorLock)
+- [x] **Fallback** si l'IA ne répond pas
+- [x] **Validation des formulaires**
+
+### 3. Sécurité & Sessions
+- [x] **Session persistante** après rechargement
+- [x] **Déconnexion automatique** si token expiré
+- [x] **Pas d'accès** aux données d'autres utilisateurs
+- [x] **Upload sécurisé** (validation des fichiers)
+- [x] **RLS Supabase** actif
+
+### 4. Données & Synchronisation
+- [x] **Sauvegarde automatique** des messages
+- [x] **Sauvegarde du canvas** Excalidraw
+- [x] **Chargement des messages** historiques
+- [ ] **Mise à jour en temps réel** (si applicable)
+- [x] **Pas de perte de données** après rechargement
+
+### 5. Responsive & Accessibilité
+- [x] **Mobile** (< 768px) : layout adapté
+- [x] **Tablette** (768px - 1024px) : layout adapté
+- [x] **Desktop** (> 1024px) : layout complet
+- [x] **Touch targets** suffisamment grands (44x44px min)
+- [x] **Contraste** suffisant pour la lisibilité
+
+### 6. Edge Cases
+- [ ] **Pas de bulletin** : affichage par défaut
+- [ ] **Pas de planning** : message approprié
+- [ ] **Session démo** : pas d'appel à l'Edge Function
+- [ ] **Image invalide** : gestion de l'erreur
+- [ ] **Texte très long** : pas de débordement
+- [ ] **Connexion lente** : indicateurs de chargement
+ 
+ ### 7. Tests de Sécurité & Robustesse (NOUVEAU)
+ - [x] **Protection SSRF** : Essayer de charger une image depuis une IP locale (ex: 127.0.0.1) → Doit être bloqué.
+ - [x] **Domaines Autorisés** : Charger une image depuis Wikipedia → OK. Depuis un site inconnu → Bloqué.
+ - [x] **Validation Temps Serveur** : Tenter de modifier le `dailyMinutesUsed` envoyé par le client → Le serveur doit utiliser sa propre valeur et bloquer si dépassé.
+ - [x] **Format JSON IA** : Vérifier que les réponses de l'IA sont bien affichées (pas de JSON brut visible).
+ - [x] **Parsing Résilient** : Vérifier que si l'IA répond mal (JSON invalide), un message d'erreur propre s'affiche ("Je n'ai pas compris...").
+
+---
+
+ ### 8. Inscription & Onboarding (MANQUANT)
+ - [x] **Invitation Parent** : Le parent invite un enfant par email → Email reçu.
+ - [x] **Inscription Enfant (Lien)** : L'enfant clique sur le lien, définit son mot de passe → Compte créé et lié.
+ - [x] **Inscription Enfant (Code)** : L'enfant s'inscrit seul avec le mail du parent → Compte "En attente" côté parent.
+ - [x] **Validation Compte** : Le parent valide le compte en attente → L'enfant peut accéder à l'app.
+ - [x] **Tutoriel** : Le nouvel élève voit-il le tutoriel/onboarding au premier lancement ?
+
+ ### 9. Intelligence Contextuelle (IA)
+ - [ ] **Alerte Bulletin** : Si la matière est "fragile" dans le bulletin, l'IA doit être plus encourageante/détaillée.
+ - [ ] **Priorité Parent** : Si le parent a mis une note "Travailler la géométrie", l'IA doit en parler ou proposer des exercices liés.
+ - [ ] **Pause Planning** : Si la session dure longtemps et qu'un break est prévu au planning, l'IA doit le suggérer ?
+ - [x] **Mémoire** : L'IA doit se souvenir des conversations précédentes (ex: "Comme on a vu pour les volcans...").
+
+---
+ 
+ ### 10. Landing Page (Site Vitrine)
+ - [x] **Hero Section** : Le titre et le CTA "Commencer l'aventure" sont visibles.
+ - [x] **Navigation** : Les liens du menu scrollent vers les bonnes sections.
+ - [x] **Stats** : Les compteurs s'animent au scroll.
+ - [x] **Responsive** : Le menu hamburger fonctionne sur mobile.
+ - [x] **Footer** : Les liens légaux et sociaux sont présents.
+ - [x] **Redirection** : Si connecté, la Landing redirige vers le Dashboard approprié.
+
+ ### 11. Super Admin Dashboard (Gestion)
+ - [x] **Accès Sécurisé** : Un utilisateur normal ne peut PAS accéder à `/admin`.
+ - [x] **Vue d'Ensemble** : Stats globales (Nombre de parents, enfants, programmes).
+ - [x] **Gestion Utilisateurs** : Voir la liste des parents et enfants, ainsi que l'XP/Rang des enfants.
+ - [x] **Scraping Perplexity** : Lancer un scraping manuel (ex: "Maths 6ème") et voir les logs.
+ - [x] **Programme Scolaire** : Vérifier que les chapitres importés s'affichent correctement par classe.
+ - [x] **Sources** : Ajouter/Supprimer une source de données pour le scraping.
+
+ ### 12. Pages d'Erreur & Redirections
+ - [x] **Page 404** : Taper une URL invalide (`/toto`) → Affiche la page "Perdu dans la jungle ?".
+ - [x] **Redirection Auth** : Tenter d'accéder à `/app/map` sans être connecté → Renvoie vers `/auth`.
+ - [x] **Redirection Rôle** : Un élève tentant d'aller sur `/parent` est redirigé vers `/app`.
+
+ ---
+ 
+ ## 🎯 SCÉNARIOS DE TEST COMPLETS
+
+### Scénario 1 : Premier Jour d'un Élève (Inscription + Découverte) [VALIDÉ ✅]
+1. Réception de l'invitation par email
+2. Création du mot de passe
+3. Onboarding / Tutoriel
+4. Découverte de la carte
+5. Sélection d'un gardien (ex: SVT)
+6. Première conversation avec l'IA
+7. Réception d'un schéma dans le Grimoire
+8. Annotation du schéma
+9. Gain de XP et artefact
+10. Déconnexion
+
+### Scénario 2 : Parent Configure son Enfant [VALIDÉ ✅]
+1. Connexion parent
+2. Upload du bulletin (PDF)
+3. Analyse automatique du bulletin
+4. Vérification des matières en difficulté
+5. Upload de l'emploi du temps
+6. Analyse et extraction des créneaux
+7. Ajout d'une note prioritaire ("Travailler les Maths")
+8. Définition de la limite de temps (60 min/jour)
+9. Sauvegarde et vérification
+
+### Scénario 3 : Session de Révision Complète [EN COURS 🚧]
+1. Élève se connecte
+2. Voit la matière prioritaire (selon note parent)
+3. Ouvre le chat avec le gardien approprié
+4. Pose une question
+5. Reçoit une réponse + schéma [VALIDÉ]
+6. Annote le schéma dans le Grimoire [FIX VALIDÉ]
+7. Pose une question de suivi
+8. Complète un exercice
+9. Gagne des XP
+10. Consulte son historique (Grimoire Modal)
+11. Reprend une ancienne session
+
+### Scénario 4 : Gestion d'Erreurs [VALIDÉ ✅]
+1. Connexion avec mauvais mot de passe → Message d'erreur
+2. Upload d'un fichier trop gros → Message d'erreur
+3. Envoi d'un message sans connexion → Timeout + message
+4. Sélection d'un gardien pendant une session → Redirection
+5. Dépassement de la limite de temps → Blocage + message
+
+---
+
+## 📊 CRITÈRES DE SUCCÈS
+
+### Fonctionnalités Critiques (Bloquantes si KO)
+- ✅ Authentification fonctionne
+- ✅ Chat IA répond correctement
+- ✅ Images s'affichent dans le Grimoire
+- ✅ Upload de bulletin fonctionne
+- ✅ Sauvegarde des données fonctionne
+
+### Fonctionnalités Importantes (À corriger rapidement)
+- ⚠️ Autoscroll du chat
+- ⚠️ Responsive mobile
+- ⚠️ Gestion des erreurs
+- ⚠️ Performance (< 3s)
+
+### Fonctionnalités Nice-to-Have (Améliorations futures)
+- 💡 Animations avancées
+- 💡 Mode hors-ligne
+- 💡 Notifications push
+- 💡 Export PDF des sessions
+
+
+### 1. Authentification & Profil
 - [ ] **Connexion** avec email/mot de passe
 - [ ] **Déconnexion** depuis le header
 - [ ] **Voir son profil** (nom, classe, XP, niveau)

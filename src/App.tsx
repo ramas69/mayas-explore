@@ -136,7 +136,7 @@ function App() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/app" element={<Navigate to="/app/map" replace />} />
           <Route
-            path="/app/:tab"
+            path="/app/:tab/:subParam?"
             element={
               <ProtectedRoute allowedRoles={['enfant']}>
                 <StudentApp />

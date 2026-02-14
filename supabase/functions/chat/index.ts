@@ -14,6 +14,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const WIKI_USER_AGENT = 'EdTech-App/1.0 (contact@edtech.com)';
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 function ok(data: unknown) {
@@ -199,7 +201,10 @@ async function searchWikipediaFR(
   try {
     logPerf('WikipédiaFR: Start');
     const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=3&format=json&origin=*`;
-    const searchRes = await fetchWithTimeout(searchUrl, { timeoutMs: 5000 });
+    const searchRes = await fetchWithTimeout(searchUrl, {
+      timeoutMs: 5000,
+      headers: { 'User-Agent': WIKI_USER_AGENT }
+    });
     if (!searchRes.ok) return null;
 
     const searchJson = await searchRes.json();
@@ -223,7 +228,10 @@ async function searchWikipediaFR(
 async function _getWikipediaImage(title: string): Promise<string | null> {
   try {
     const url = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-    const res = await fetchWithTimeout(url, { timeoutMs: 4000 });
+    const res = await fetchWithTimeout(url, {
+      timeoutMs: 4000,
+      headers: { 'User-Agent': WIKI_USER_AGENT }
+    });
     if (!res.ok) return null;
     const json = await res.json();
 
@@ -288,7 +296,10 @@ async function searchWikimediaCommons(
 async function _wikimediaSearch(query: string): Promise<string | null> {
   const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=5&prop=imageinfo&iiprop=url|size&format=json&origin=*`;
   try {
-    const res = await fetchWithTimeout(searchUrl, { timeoutMs: 5000 });
+    const res = await fetchWithTimeout(searchUrl, {
+      timeoutMs: 5000,
+      headers: { 'User-Agent': WIKI_USER_AGENT }
+    });
     const json = await res.json();
     const pages = json?.query?.pages;
     if (!pages) return null;
@@ -377,7 +388,7 @@ async function _checkUrlValidity(url: string): Promise<boolean> {
   try {
     const res = await fetchWithTimeout(url, {
       method: 'HEAD', timeoutMs: 4000,
-      headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'image/*,*/*;q=0.8' },
+      headers: { 'User-Agent': WIKI_USER_AGENT, Accept: 'image/*,*/*;q=0.8' },
     });
     const type = res.headers.get('content-type') || '';
     return res.ok && (type.startsWith('image') || !!url.match(/\.(jpg|jpeg|png|webp)$/i));
@@ -851,7 +862,7 @@ Deno.serve(async (req) => {
     const proxyUrl = reqUrl.searchParams.get('image_url');
     if (req.method === 'GET' && proxyUrl) {
       try {
-        const allowedDomains = ['wikipedia.org', 'wikimedia.org', 'upload.wikimedia.org', 'commons.wikimedia.org'];
+        const allowedDomains = ['wikipedia.org', 'wikimedia.org', 'upload.wikimedia.org', 'commons.wikimedia.org', 'kartable.fr', 'lumni.fr', 'alloprof.qc.ca', 'freepik.com'];
         const targetUrl = new URL(proxyUrl);
 
         // Vérification du domaine autorisé
@@ -865,7 +876,7 @@ Deno.serve(async (req) => {
           return err('Protocole non autorisé.');
         }
 
-        const r = await fetchWithTimeout(proxyUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' }, timeoutMs: 15000 });
+        const r = await fetchWithTimeout(proxyUrl, { method: 'GET', headers: { 'User-Agent': WIKI_USER_AGENT }, timeoutMs: 15000 });
         if (!r.ok) {
           return new Response(JSON.stringify({ error: `Proxy: ${r.status}` }), {
             status: r.status,
@@ -1007,16 +1018,26 @@ Deno.serve(async (req) => {
 
       finalContent = (msg.content || '').trim();
 
+      // Nettoyage Markdown (```json ... ```)
+      const jsonMatch = finalContent.match(/```json\n([\s\S]*?)\n```/) || finalContent.match(/```([\s\S]*?)```/);
+      if (jsonMatch) {
+        finalContent = jsonMatch[1].trim();
+      }
+
       // Nouveau Parsing JSON
       let parsed: any = {};
       try {
         parsed = JSON.parse(finalContent);
       } catch {
         console.warn('JSON Parse failed, fallback text', finalContent.slice(0, 50));
+        // Si c'est déjà du texte brut qui ressemble à du JSON mais mal formé, on le garde tel quel
+        // Mais si c'est valide JSON affiché en brut, c'est ce qu'on veut éviter.
+        // Ici, si ça fail, on considère que c'est du texte normal (content).
         parsed = { content: finalContent };
       }
 
-      finalContent = parsed.content || "Je n'ai pas compris. Peux-tu reformuler ? 🏛️";
+      // Support de 'response' comme alias de 'content' (car l'LLM se trompe parfois)
+      finalContent = parsed.content || parsed.response || "Je n'ai pas compris. Peux-tu reformuler ? 🏛️";
 
       // Extraction Evaluation depuis JSON
       evaluation = parsed.evaluation || null;

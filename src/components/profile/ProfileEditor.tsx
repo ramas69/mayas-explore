@@ -15,7 +15,7 @@ import type { Classe } from '../../types';
 const CLASSES: Classe[] = ['6ème', '5ème', '4ème', '3ème'];
 
 export function ProfileEditor() {
-  const { user, initialize } = useAuthStore();
+  const { user } = useAuthStore();
   const [fullName, setFullName] = useState('');
   const [classe, setClasse] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
@@ -31,8 +31,12 @@ export function ProfileEditor() {
 
   useEffect(() => {
     if (user) {
+      console.log('[ProfileEditor] MOUNT/UPDATE. User:', user);
+      console.log('[ProfileEditor] Setting classe state to:', user.classe);
       setFullName(user.full_name || '');
       setClasse((user.classe as string) || '');
+    } else {
+      console.log('[ProfileEditor] MOUNT. No user defined.');
     }
   }, [user]);
 
@@ -49,9 +53,16 @@ export function ProfileEditor() {
           classe: CLASSES.includes(classe as Classe) ? classe : null,
         })
         .eq('id', user.id);
-      await initialize();
+
+      // Update local store immediately to reflect changes without reload
+      useAuthStore.setState((state) => ({
+        user: state.user ? { ...state.user, full_name: fullName.trim(), classe: classe as Classe } : null
+      }));
+
+      // Also refresh from server to be sure
+      // await initialize(); 
       setSaved(true);
-    } catch (_) { }
+    } catch (e) { console.error(e) }
     setIsSaving(false);
   };
 

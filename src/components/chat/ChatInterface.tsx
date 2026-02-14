@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useCurriculumStore } from '../../stores/curriculumStore';
+import { XpToast } from './XpToast';
 import { Send, Sparkles, MapPin, BookOpen, ChevronDown, ImagePlus, Map } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { TypingIndicator } from './TypingIndicator';
@@ -330,6 +331,7 @@ export function ChatInterface({ sessionId, studentId, classe, selectedChapter, o
         ))}
 
         {hasValidSession && isTyping && <TypingIndicator status={loadingStatus} />}
+        {hasValidSession && <XpToast />}
         <div ref={messagesEndRef} />
       </div>
 

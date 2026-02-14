@@ -9,45 +9,11 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 // Régénérer avec: npx supabase gen types typescript --project-id <ID> > src/types/database.ts
 // Fonction de lock personnalisée pour éviter les erreurs navigator.locks
 // qui causent "DOMException: The operation was aborted"
-const customLock = async <R>(
-  name: string,
-  timeout: number,
-  fn: () => Promise<R>
-): Promise<R> => {
-  console.log(`[CustomLock] Acquiring lock: ${name} at ${new Date().toISOString()}`);
-
-  // Timeout de sécurité : utiliser 30s par défaut si timeout est 0 ou invalide
-  const timeoutMs = timeout > 0 ? Math.min(timeout, 30000) : 30000;
-
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      console.error(`[CustomLock] TIMEOUT after ${timeoutMs}ms for lock: ${name}`);
-      reject(new Error(`Lock timeout: ${name} took more than ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([fn(), timeoutPromise]);
-    // Nettoyer le timeout si la fonction a réussi
-    if (timeoutId) clearTimeout(timeoutId);
-    console.log(`[CustomLock] Released lock: ${name}`);
-    return result;
-  } catch (error) {
-    // Nettoyer le timeout même en cas d'erreur
-    if (timeoutId) clearTimeout(timeoutId);
-    console.error(`[CustomLock] Error in lock ${name}:`, error);
-    throw error;
-  }
-};
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    lock: customLock,
   },
 });
 

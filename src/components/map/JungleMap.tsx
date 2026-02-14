@@ -125,12 +125,12 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
         onTouchStart={() => setHoveredSubject(subject)}
         onTouchEnd={() => setTimeout(() => setHoveredSubject(null), 200)}
         className={`relative w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-300 text-left active:scale-[0.98] ${status === 'locked'
-            ? 'bg-slate-800/80 border-slate-600/50 opacity-75'
-            : status === 'danger'
-              ? 'bg-rose-900/70 border-rose-500/60 shadow-rose-500/20 shadow-lg'
-              : status === 'mastered'
-                ? 'bg-emerald-900/70 border-emerald-500/60 shadow-emerald-500/20 shadow-lg'
-                : 'bg-amber-900/70 border-amber-500/60 shadow-amber-500/20 shadow-lg'
+          ? 'bg-slate-800/80 border-slate-600/50 opacity-75'
+          : status === 'danger'
+            ? 'bg-rose-900/70 border-rose-500/60 shadow-rose-500/20 shadow-lg'
+            : status === 'mastered'
+              ? 'bg-emerald-900/70 border-emerald-500/60 shadow-emerald-500/20 shadow-lg'
+              : 'bg-amber-900/70 border-amber-500/60 shadow-amber-500/20 shadow-lg'
           } ${status !== 'locked' ? 'card-border-light' : ''}`}
         style={status !== 'locked' ? { ['--border-light-duration' as string]: `${5 + (index % 5) * 1.5}s` } : undefined}
       >
@@ -254,7 +254,7 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
             return (
               <div
                 key={subject}
-                className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 cursor-pointer group active:scale-95 min-w-[56px] min-h-[52px]"
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 cursor-pointer group active:scale-95 min-w-[56px] min-h-[52px] pointer-events-auto"
                 style={{ top: pos.top, left: pos.left, zIndex: isHovered ? 50 : 10 + index }}
                 onMouseEnter={() => setHoveredSubject(subject)}
                 onMouseLeave={() => setHoveredSubject(null)}
@@ -284,12 +284,12 @@ export function JungleMap({ studentId, onSelectChapter, onShowGrimoire }: Jungle
                 {/* Structure / Temple (région) */}
                 <div
                   className={`relative w-14 h-12 sm:w-20 sm:h-16 lg:w-24 lg:h-20 rounded-md sm:rounded-lg transition-all duration-300 ${status !== 'locked' ? 'card-border-light' : ''} ${status === 'locked'
-                      ? 'bg-slate-800/80 border border-slate-600/50 shadow-xl'
-                      : status === 'danger'
-                        ? 'bg-rose-900/70 border-2 border-rose-500/60 shadow-rose-500/20 shadow-xl'
-                        : status === 'mastered'
-                          ? 'bg-emerald-900/70 border-2 border-emerald-500/60 shadow-emerald-500/20 shadow-xl'
-                          : 'bg-amber-900/70 border-2 border-amber-500/60 shadow-amber-500/20 shadow-xl'
+                    ? 'bg-slate-800/80 border border-slate-600/50 shadow-xl'
+                    : status === 'danger'
+                      ? 'bg-rose-900/70 border-2 border-rose-500/60 shadow-rose-500/20 shadow-xl'
+                      : status === 'mastered'
+                        ? 'bg-emerald-900/70 border-2 border-emerald-500/60 shadow-emerald-500/20 shadow-xl'
+                        : 'bg-amber-900/70 border-2 border-amber-500/60 shadow-amber-500/20 shadow-xl'
                     } ${status === 'locked' ? 'opacity-60' : ''} ${isHovered ? 'scale-110 z-10' : ''}`}
                   style={status !== 'locked' ? { ['--border-light-duration' as string]: `${5 + (index % 5) * 1.5}s` } : undefined}
                 >

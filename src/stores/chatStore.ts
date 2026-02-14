@@ -243,11 +243,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         userImageBase64: imageBase64 || null,
       };
 
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
       const functionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
-      // Utiliser la clé anon : le token utilisateur cause 401 (expiré ou rejeté par la gateway)
-      const authHeader = anonKey ? `Bearer ${anonKey}` : `Bearer ${session.access_token}`;
-      console.log('[ChatStore] Appel Edge Function chat...', { messageLen: content.length, historyLen: body.history.length, useAnonKey: !!anonKey });
+      // CORRECTIF : On DOIT utiliser le token utilisateur pour que getUser() fonctionne côté serveur
+      const authHeader = `Bearer ${session.access_token}`;
+      console.log('[ChatStore] Appel Edge Function chat...', { messageLen: content.length, historyLen: body.history.length, useSameToken: true });
 
       const FETCH_TIMEOUT_MS = 120_000; // 2 min (Edge Function limite ~150s)
       const controller = new AbortController();
@@ -407,14 +407,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
 
           // Vérifier les bonus de série
+          let currentStreak = 0;
           const { data: streak } = await getStreak(studentId);
           if (streak && resp.evaluation.evaluation === 'correct') {
+            currentStreak = streak.current_streak;
             const streakBonus = getStreakBonus(streak.current_streak);
             if (streakBonus > 0) {
               const { useGamificationStore } = await import('./gamificationStore');
               await useGamificationStore.getState().earnXP(studentId, streakBonus);
               console.log(`[ChatStore] 🔥 Série de ${streak.current_streak}! Bonus: +${streakBonus} XP`);
             }
+          }
+
+          // Afficher le toast XP dans le chat
+          {
+            const { useGamificationStore } = await import('./gamificationStore');
+            const streakBonus = currentStreak >= 3 ? getStreakBonus(currentStreak) : 0;
+            useGamificationStore.getState().showXpToast({
+              xp: xpAwarded + streakBonus,
+              evaluation: resp.evaluation.evaluation,
+              streakCount: currentStreak,
+            });
           }
         } catch (error) {
           console.error('[ChatStore] Erreur lors du traitement de l\'évaluation:', error);
@@ -446,7 +459,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? "Le mentor met trop de temps à répondre. Réessaie dans un instant ! 🏕️"
         : isSessionError
           ? "Ta session semble avoir expiré. Essaie de rafraîchir la page si le problème persiste. 🔄"
-          : "La liaison avec le campement est instable, réessaye dans un instant, exploratrice. 🏕️";
+          : `La liaison avec le campement est instable (${errMsg}). Réessaye dans un instant, exploratrice. 🏕️`;
 
       if (isSessionError) {
         // Force logout state check potentially? For now just visual feedback.

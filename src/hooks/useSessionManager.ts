@@ -1,38 +1,43 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { getProfile, calculateDailyUsage, startSession } from '../lib/supabase';
+import { calculateDailyUsage, startSession } from '../lib/supabase';
 import type { Subject, Curriculum } from '../types';
 
 export function useSessionManager() {
-    const navigate = useNavigate();
     const { user } = useAuthStore();
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
     const [selectedChapter, setSelectedChapter] = useState<Curriculum | null>(null);
 
-    const checkDailyLimit = async (): Promise<boolean> => {
+    const checkDailyLimit = useCallback(async (): Promise<boolean> => {
         if (!user?.id) return false;
 
-        console.log('[SessionManager] Checking profile limits...');
-        const { data: profile } = await getProfile(user.id);
-        const limit = (profile as { daily_time_limit?: number } | null)?.daily_time_limit ?? 120;
+        console.log('[SessionManager] Checking profile limits from store...');
+        // Profile is already in authStore, no need to fetch
+        const limit = user.daily_time_limit ?? 120;
 
         console.log('[SessionManager] Calculating daily usage...');
-        const dailyUsed = await calculateDailyUsage(user.id);
-        console.log('[SessionManager] Daily usage:', { dailyUsed, limit });
+        try {
+            const dailyUsed = await calculateDailyUsage(user.id);
+            console.log('[SessionManager] Daily usage:', { dailyUsed, limit });
 
-        if (dailyUsed >= limit) {
-            alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
-            return false;
+            if (dailyUsed >= limit) {
+                alert('Limite journalière atteinte. Reviens demain, explorateur ! 🌅');
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('[SessionManager] calculateDailyUsage error:', error);
+            // In case of error (e.g. network), we might want to allow or block. 
+            // Let's allow for now to avoid blocking user if stats fail.
+            return true;
         }
-        return true;
-    };
+    }, [user?.id, user?.daily_time_limit]);
 
-    const startNewSession = async (subject: Subject, chapterName: string, chapterObj?: Curriculum) => {
+    const startNewSession = useCallback(async (subject: Subject, chapterName: string, chapterObj?: Curriculum) => {
         if (!user?.id) return;
 
-        // Optimistic UI: switch to chat immediately
-        navigate('/app/chat');
+        // Optimistic UI: switch to chat immediately -> Managed by router now
+        // navigate('/app/chat');
 
         const canProceed = await checkDailyLimit();
         if (!canProceed) return;
@@ -68,7 +73,7 @@ export function useSessionManager() {
                 });
             }
         }
-    };
+    }, [user?.id, checkDailyLimit]);
 
     return {
         currentSessionId,
